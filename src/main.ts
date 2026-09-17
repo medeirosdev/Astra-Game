@@ -47,6 +47,15 @@ async function main() {
 
   setInterval(() => sync.sendPosition(engine.getLocalPosition()), 1000 / POSITION_SYNC_HZ);
 
+  // Diagnóstico: RTCPeerConnection pode existir (sinalização encontrou o outro
+  // peer) mesmo sem nunca conectar de fato (ICE falhou — ex: rede bloqueando
+  // WebRTC ou isolamento de cliente no Wi-Fi). Ajuda a distinguir os dois casos.
+  setInterval(() => {
+    const peers = room.getPeers();
+    const states = Object.entries(peers).map(([id, pc]) => `${id.slice(0, 6)}:${pc.iceConnectionState}`);
+    console.log("[astra] conexões WebRTC:", states.length === 0 ? "nenhuma ainda" : states.join(", "));
+  }, 5000);
+
   window.addEventListener("keydown", (e) => {
     const slot = engine.runtime.slots.find((s) => s.key === e.key);
     if (!slot) return;
