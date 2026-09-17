@@ -20,11 +20,12 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 - [x] Primeira leva de bugs revisada e corrigida (tipos de ability id, vazamento de recursos Three.js, XSS via innerHTML, barras de HUD com max hardcoded)
 
 ## Fase 2 — Multiplayer de verdade
-- [ ] Ao entrar na sala, jogadores se veem no mundo (spawn de personagem remoto por peer)
-- [ ] Sincronizar posição/rotação entre peers
-- [ ] Sincronizar cast de habilidade (todo mundo vê o efeito visual, não só quem usou)
-- [ ] Host autoritativo decide dano/acerto real (ver regra em `about.md`)
-- [ ] Testar com 2 navegadores/abas em redes diferentes (checar NAT/TURN na prática)
+- [x] Ao entrar na sala, jogadores se veem no mundo (spawn de personagem remoto por peer)
+- [x] Sincronizar posição entre peers (15hz, com lerp no destino pra suavizar)
+- [ ] Sincronizar rotação/direção do personagem (hoje o personagem remoto não vira pro lado que anda)
+- [x] Sincronizar cast de habilidade (todo mundo vê o efeito visual, não só quem usou)
+- [ ] Host autoritativo decide dano/acerto real (ver regra em `about.md`) — ainda não existe aplicação de dano nenhuma (ver Fase 3)
+- [ ] Testar com 2 navegadores/abas em redes diferentes (checar NAT/TURN na prática) — ainda não verificado manualmente
 
 ## Fase 3 — Combate de verdade
 - [ ] Sistema de alvo/hitbox: projétil e área realmente acertam outro jogador (ou mob)

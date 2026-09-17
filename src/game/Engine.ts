@@ -16,6 +16,11 @@ interface Projectile {
   bornAt: number;
 }
 
+interface RemotePlayer {
+  mesh: THREE.Mesh;
+  target: THREE.Vector3;
+}
+
 export class Engine {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -25,6 +30,7 @@ export class Engine {
   private readonly clock = new THREE.Clock();
   private readonly keys = new Set<string>();
   private readonly projectiles: Projectile[] = [];
+  private readonly remotePlayers = new Map<string, RemotePlayer>();
   private readonly moveSpeed: number;
   readonly runtime: AbilityRuntime;
 
@@ -128,7 +134,48 @@ export class Engine {
     this.camera.lookAt(this.player.position);
   }
 
+  getLocalPosition(): { x: number; y: number; z: number } {
+    return { x: this.player.position.x, y: this.player.position.y, z: this.player.position.z };
+  }
+
+  spawnRemotePlayer(peerId: string, color: string) {
+    if (this.remotePlayers.has(peerId)) return;
+    const geo = new THREE.CapsuleGeometry(0.5, 1, 4, 8);
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.1 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(0, 1, 0);
+    mesh.castShadow = true;
+    this.scene.add(mesh);
+    this.remotePlayers.set(peerId, { mesh, target: mesh.position.clone() });
+  }
+
+  updateRemotePlayer(peerId: string, position: { x: number; y: number; z: number }) {
+    const remote = this.remotePlayers.get(peerId);
+    if (!remote) return;
+    remote.target.set(position.x, position.y, position.z);
+  }
+
+  removeRemotePlayer(peerId: string) {
+    const remote = this.remotePlayers.get(peerId);
+    if (!remote) return;
+    this.scene.remove(remote.mesh);
+    remote.mesh.geometry.dispose();
+    (remote.mesh.material as THREE.Material).dispose();
+    this.remotePlayers.delete(peerId);
+  }
+
+  private updateRemotePlayers() {
+    for (const remote of this.remotePlayers.values()) {
+      remote.mesh.position.lerp(remote.target, 0.25);
+    }
+  }
+
   castAbility(ability: Ability) {
+    this.castAbilityAt(ability, this.player.position);
+  }
+
+  castAbilityAt(ability: Ability, origin: { x: number; y: number; z: number }) {
+    const originVec = new THREE.Vector3(origin.x, origin.y, origin.z);
     if (ability.target.kind === "projectile") {
       const geo = new THREE.SphereGeometry(0.25, 12, 12);
       const mat = new THREE.MeshStandardMaterial({
@@ -137,7 +184,7 @@ export class Engine {
         emissiveIntensity: 2,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.copy(this.player.position).add(new THREE.Vector3(0, 0.5, -1));
+      mesh.position.copy(originVec).add(new THREE.Vector3(0, 0.5, -1));
       const velocity = new THREE.Vector3(0, 0, -1).multiplyScalar(ability.target.speed);
       this.scene.add(mesh);
       this.projectiles.push({ mesh, velocity, bornAt: performance.now() });
@@ -145,7 +192,7 @@ export class Engine {
     // area / instant / self: efeito visual simples por enquanto (flash na cor do vfx).
     if (ability.target.kind !== "projectile") {
       const light = new THREE.PointLight(ability.vfx.color, 4, 6);
-      light.position.copy(this.player.position).add(new THREE.Vector3(0, 1, 0));
+      light.position.copy(originVec).add(new THREE.Vector3(0, 1, 0));
       this.scene.add(light);
       setTimeout(() => this.scene.remove(light), 200);
     }
@@ -175,6 +222,7 @@ export class Engine {
       this.runtime.update(dt);
       this.updateMovement(dt);
       this.updateProjectiles(dt);
+      this.updateRemotePlayers();
       this.onHudUpdate(this.runtime);
       this.composer.render();
       requestAnimationFrame(loop);

@@ -56,3 +56,9 @@ export const ABILITIES = {
 } satisfies Record<string, Ability>;
 
 export type AbilityId = keyof typeof ABILITIES;
+
+// Dados vindos de outro peer não são confiáveis — usar antes de indexar ABILITIES
+// com um abilityId recebido pela rede (ver skill "review", seção DOM e segurança).
+export function isAbilityId(value: string): value is AbilityId {
+  return value in ABILITIES;
+}
