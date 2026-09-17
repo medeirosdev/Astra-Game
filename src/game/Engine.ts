@@ -8,8 +8,12 @@ import type { CharacterDef } from "../characters/types";
 import { AbilityRuntime } from "./AbilityRuntime";
 import { CharacterModel } from "./CharacterModel";
 
-const GRID_SIZE = 24;
+const GRID_SIZE = 240; // 10x o tamanho original (24), a pedido
 const BLOCK_SIZE = 1;
+// Chão usa blocos maiores que BLOCK_SIZE só pra não precisar de 57600
+// instâncias (240x240 em blocos de 1 unidade) — isso sozinho derrubava o
+// jogo a ~2fps (medido). Com blocos de 3 unidades vira 6400, tranquilo.
+const GROUND_BLOCK_SIZE = 3;
 const UP = new THREE.Vector3(0, 1, 0);
 const CAMERA_DISTANCE = 11;
 const CAMERA_HEIGHT = 2;
@@ -18,11 +22,27 @@ const MAX_PITCH = 1.3;
 const MOUSE_SENSITIVITY = 0.0025;
 const SPAWN_POINT = new THREE.Vector3(0, 0, 0);
 const MOVING_THRESHOLD = 0.01;
+const WALL_HEIGHT = 4;
+const ARENA_BOUND = GRID_SIZE / 2 - 1;
+const OBSTACLE_COUNT = 140;
+const OBSTACLE_CLEAR_RADIUS = 8; // sem obstáculo em cima do spawn
+const OBSTACLE_MELEE_REACH = 3; // mesmo alcance corpo-a-corpo usado contra jogadores (ver combat.ts)
 
 interface Projectile {
   mesh: THREE.Mesh;
   velocity: THREE.Vector3;
   bornAt: number;
+  damage: number | null;
+}
+
+interface Obstacle {
+  mesh: THREE.Mesh;
+  material: THREE.MeshStandardMaterial;
+  position: THREE.Vector3;
+  radius: number;
+  health: number;
+  maxHealth: number;
+  destroyed: boolean;
 }
 
 interface RemotePlayer {
@@ -57,7 +77,9 @@ export class Engine {
   private readonly clock = new THREE.Clock();
   private readonly keys = new Set<string>();
   private readonly projectiles: Projectile[] = [];
+  private readonly obstacles: Obstacle[] = [];
   private readonly remotePlayers = new Map<string, RemotePlayer>();
+  private readonly sun: THREE.DirectionalLight;
   private readonly moveSpeed: number;
   private yaw = 0;
   private pitch = 0.5;
@@ -79,13 +101,13 @@ export class Engine {
     container.appendChild(this.renderer.domElement);
 
     this.scene.background = new THREE.Color(0x0a0a12);
-    this.scene.fog = new THREE.Fog(0x0a0a12, 20, 60);
+    this.scene.fog = new THREE.Fog(0x0a0a12, 40, 220);
 
-    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 300);
     this.camera.position.set(0, 8, 12);
 
-    this.setupLights();
-    this.buildVoxelGround();
+    this.sun = this.setupLights();
+    this.buildMap();
 
     this.player = new THREE.Group();
     this.player.position.copy(SPAWN_POINT);
@@ -131,38 +153,168 @@ export class Engine {
     });
   }
 
-  private setupLights() {
+  // O mapa ficou grande demais (240x240) pra um frustum de sombra fixo cobrir
+  // tudo sem perder resolução — em vez disso, o sol acompanha o jogador (ver
+  // updateSun), mantendo sombra nítida sempre perto de quem importa em vez
+  // de tentar cobrir o mapa inteiro de uma vez.
+  private setupLights(): THREE.DirectionalLight {
     const ambient = new THREE.AmbientLight(0x445566, 1.2);
     this.scene.add(ambient);
 
     const sun = new THREE.DirectionalLight(0xfff2d9, 1.8);
-    sun.position.set(10, 20, 10);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -20;
-    sun.shadow.camera.right = 20;
-    sun.shadow.camera.top = 20;
-    sun.shadow.camera.bottom = -20;
+    sun.shadow.camera.left = -30;
+    sun.shadow.camera.right = 30;
+    sun.shadow.camera.top = 30;
+    sun.shadow.camera.bottom = -30;
+    sun.shadow.camera.far = 80;
     this.scene.add(sun);
+    this.scene.add(sun.target);
+    return sun;
   }
 
-  private buildVoxelGround() {
-    const geo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x2b3a55, roughness: 0.85 });
-    const mesh = new THREE.InstancedMesh(geo, mat, GRID_SIZE * GRID_SIZE);
+  private updateSun() {
+    this.sun.position.set(this.player.position.x + 10, this.player.position.y + 20, this.player.position.z + 10);
+    this.sun.target.position.copy(this.player.position);
+  }
+
+  private buildMap() {
+    this.buildGround();
+    this.buildWalls();
+    this.buildObstacles();
+  }
+
+  private buildGround() {
+    const tilesPerSide = Math.ceil(GRID_SIZE / GROUND_BLOCK_SIZE);
+    const geo = new THREE.BoxGeometry(GROUND_BLOCK_SIZE, GROUND_BLOCK_SIZE, GROUND_BLOCK_SIZE);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
+    const mesh = new THREE.InstancedMesh(geo, mat, tilesPerSide * tilesPerSide);
+    // Chão não precisa projetar sombra (não faz sentido visual nele mesmo) —
+    // só recebe. Isso sozinho já era um desperdício grande em qualquer
+    // tamanho de mapa, só que agora com 6400+ instâncias ficaria realmente caro.
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+
+    const colorA = new THREE.Color(0x2b3a55);
+    const colorB = new THREE.Color(0x24314a);
+    const dummy = new THREE.Object3D();
+    let i = 0;
+    for (let xi = 0; xi < tilesPerSide; xi++) {
+      for (let zi = 0; zi < tilesPerSide; zi++) {
+        const x = (xi - tilesPerSide / 2) * GROUND_BLOCK_SIZE;
+        const z = (zi - tilesPerSide / 2) * GROUND_BLOCK_SIZE;
+        dummy.position.set(x, -GROUND_BLOCK_SIZE / 2, z);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+        mesh.setColorAt(i, (xi + zi) % 2 === 0 ? colorA : colorB);
+        i++;
+      }
+    }
+    this.scene.add(mesh);
+  }
+
+  // Muro no perímetro pra sala não ser um platô infinito — sem colisão contra
+  // ele mesmo, mas o movimento do jogador já é clamped em ARENA_BOUND (ver
+  // updateMovement/clampToArena), então na prática ninguém atravessa.
+  private buildWalls() {
+    const geo = new THREE.BoxGeometry(BLOCK_SIZE, WALL_HEIGHT, BLOCK_SIZE);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x1b2338, roughness: 0.9 });
+    const half = GRID_SIZE / 2;
+    const mesh = new THREE.InstancedMesh(geo, mat, GRID_SIZE * 4);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
     const dummy = new THREE.Object3D();
+    const place = (x: number, z: number, i: number) => {
+      dummy.position.set(x * BLOCK_SIZE, WALL_HEIGHT / 2 - 0.5, z * BLOCK_SIZE);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    };
+
     let i = 0;
-    for (let x = -GRID_SIZE / 2; x < GRID_SIZE / 2; x++) {
-      for (let z = -GRID_SIZE / 2; z < GRID_SIZE / 2; z++) {
-        dummy.position.set(x * BLOCK_SIZE, -0.5, z * BLOCK_SIZE);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(i++, dummy.matrix);
+    for (let x = -half; x < half; x++) {
+      place(x, -half, i++);
+      place(x, half - 1, i++);
+    }
+    for (let z = -half + 1; z < half - 1; z++) {
+      place(-half, z, i++);
+      place(half - 1, z, i++);
+    }
+    mesh.count = i;
+    this.scene.add(mesh);
+  }
+
+  // Caixas espalhadas como cobertura básica — só visual por enquanto, sem
+  // colisão (ver ROADMAP.md).
+  // Caixas espalhadas pelo mapa como cobertura — cada uma com vida própria,
+  // destrutível por golpes e poderes (ver resolveObstacleHits/damageObstacle).
+  private buildObstacles() {
+    const bound = ARENA_BOUND - 3;
+    let placed = 0;
+    let attempts = 0;
+    while (placed < OBSTACLE_COUNT && attempts < OBSTACLE_COUNT * 20) {
+      attempts++;
+      const x = (Math.random() * 2 - 1) * bound;
+      const z = (Math.random() * 2 - 1) * bound;
+      if (Math.hypot(x, z) < OBSTACLE_CLEAR_RADIUS) continue;
+
+      const height = 1 + Math.random() * 3;
+      const size = 1.4 + Math.random() * 1.2;
+      const geo = new THREE.BoxGeometry(size, height, size);
+      const material = new THREE.MeshStandardMaterial({ color: 0x4a3728, roughness: 0.8 });
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.position.set(x, height / 2, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+
+      const maxHealth = 30 + height * 20;
+      this.obstacles.push({
+        mesh,
+        material,
+        position: mesh.position.clone(),
+        radius: size * 0.75,
+        health: maxHealth,
+        maxHealth,
+        destroyed: false,
+      });
+      placed++;
+    }
+  }
+
+  private clampToArena(position: THREE.Vector3) {
+    position.x = THREE.MathUtils.clamp(position.x, -ARENA_BOUND, ARENA_BOUND);
+    position.z = THREE.MathUtils.clamp(position.z, -ARENA_BOUND, ARENA_BOUND);
+  }
+
+  private damageObstacle(obstacle: Obstacle, amount: number) {
+    if (obstacle.destroyed) return;
+    obstacle.health = Math.max(0, obstacle.health - amount);
+    if (obstacle.health === 0) {
+      obstacle.destroyed = true;
+      this.scene.remove(obstacle.mesh);
+      obstacle.mesh.geometry.dispose();
+      obstacle.material.dispose();
+      return;
+    }
+    const t = obstacle.health / obstacle.maxHealth;
+    obstacle.material.color.setRGB(0.29 * t + 0.03, 0.22 * t + 0.02, 0.16 * t + 0.02);
+  }
+
+  // Instant/área resolvem contra obstáculos na hora do cast (mesma lógica de
+  // combat.ts pra jogadores, só que aqui roda local — obstáculo é estado
+  // compartilhado e estático, então todo peer processa o mesmo cast (local ou
+  // recebido) e chega no mesmo resultado sem precisar de mensagem extra).
+  private resolveObstacleHits(ability: Ability, origin: THREE.Vector3) {
+    if (ability.effect.kind !== "damage") return;
+    const reach = ability.target.kind === "instant" ? OBSTACLE_MELEE_REACH : ability.target.kind === "area" ? ability.target.radius : null;
+    if (reach === null) return;
+    for (const obstacle of this.obstacles) {
+      if (!obstacle.destroyed && obstacle.position.distanceTo(origin) <= reach + obstacle.radius) {
+        this.damageObstacle(obstacle, ability.effect.amount);
       }
     }
-    this.scene.add(mesh);
   }
 
   private onResize() {
@@ -213,6 +365,7 @@ export class Engine {
         const speed = this.moveSpeed * speedFactor;
         move.normalize().multiplyScalar(speed * dt);
         this.player.position.add(move);
+        this.clampToArena(this.player.position);
         this.playerModel.play(speedFactor > 1 ? "sprint" : "walk");
         moved = true;
       }
@@ -241,6 +394,7 @@ export class Engine {
 
   teleportForward(distance: number) {
     this.player.position.addScaledVector(this.forward(), distance);
+    this.clampToArena(this.player.position);
   }
 
   spawnRemotePlayer(peerId: string, color: string) {
@@ -327,7 +481,8 @@ export class Engine {
       mesh.position.copy(originVec).add(new THREE.Vector3(0, 0.5, 0)).addScaledVector(forward, 1);
       const velocity = forward.clone().multiplyScalar(ability.target.speed);
       this.scene.add(mesh);
-      this.projectiles.push({ mesh, velocity, bornAt: performance.now() });
+      const damage = ability.effect.kind === "damage" ? ability.effect.amount : null;
+      this.projectiles.push({ mesh, velocity, bornAt: performance.now(), damage });
     }
     // area / instant / self: efeito visual simples por enquanto (flash na cor do vfx).
     if (ability.target.kind !== "projectile") {
@@ -335,6 +490,7 @@ export class Engine {
       light.position.copy(originVec).add(new THREE.Vector3(0, 1, 0));
       this.scene.add(light);
       setTimeout(() => this.scene.remove(light), 200);
+      this.resolveObstacleHits(ability, originVec);
     }
   }
 
@@ -350,6 +506,18 @@ export class Engine {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
       p.mesh.position.addScaledVector(p.velocity, dt);
+
+      if (p.damage !== null) {
+        const hit = this.obstacles.find(
+          (o) => !o.destroyed && o.position.distanceTo(p.mesh.position) <= o.radius + 0.25,
+        );
+        if (hit) {
+          this.damageObstacle(hit, p.damage);
+          this.removeProjectile(i);
+          continue;
+        }
+      }
+
       if (now - p.bornAt > 3000) {
         this.removeProjectile(i);
       }
@@ -361,6 +529,7 @@ export class Engine {
       const dt = Math.min(this.clock.getDelta(), 0.1);
       this.runtime.update(dt);
       this.updateMovement(dt);
+      this.updateSun();
       this.updateProjectiles(dt);
       this.updateRemotePlayers(dt);
       this.onHudUpdate(this.runtime);

@@ -53,7 +53,8 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 
 ## Fase 7 — Polimento
 - [x] Modelo/animação de personagem de verdade (hoje é uma cápsula colorida) — Testador e Guardião agora usam modelos reais (Kenney "Blocky Characters", CC0, ver `public/models/CREDITS.txt`), com idle/walk/sprint e uma animação de ataque/conjuração ao castar, local e pros peers remotos (`src/game/CharacterModel.ts`)
-- [ ] Variedade no chão voxel (hoje é um bloco só repetido)
+- [x] Mapa 10x maior (240x240, era 24x24), com muro no perímetro, chão em xadrez e ~140 obstáculos espalhados — e **cenário destrutível**: golpes/poderes com efeito de dano quebram obstáculos de verdade (vida própria por objeto, mesma lógica "cada peer resolve o próprio cast" do combate contra jogadores, sem precisar de mensagem de rede extra). Achei e corrigi uma regressão de performance real nesse processo: o chão em blocos de 1 unidade virou 57600 instâncias projetando sombra nelas mesmas (sem sentido, chão não precisa disso) — trocado por blocos de 3 unidades sem `castShadow`, e o sol passou a acompanhar o jogador em vez de um frustum de sombra fixo (não dava mais pra cobrir o mapa inteiro sem perder resolução)
+- [x] Variedade no chão voxel — xadrez de duas cores (feito junto com o mapa maior acima)
 - [ ] Som (vfx.sound já existe nas receitas, falta tocar de verdade)
 - [ ] Menu/HUD com mais identidade visual
 

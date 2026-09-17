@@ -31,6 +31,10 @@ export class CharacterModel {
   constructor(modelUrl: string) {
     loadTemplate(modelUrl).then(({ scene, animations }) => {
       const instance = scene.clone(true);
+      // O rig desse pack (Kenney) olha pra +Z por padrão; o resto do jogo
+      // (câmera, movimento, mira dos poderes) trata -Z como "pra frente".
+      // Sem isso o personagem anda de costas — olhando pra câmera.
+      instance.rotation.y = Math.PI;
       instance.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
           obj.castShadow = true;
