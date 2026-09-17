@@ -2,7 +2,7 @@ import type { Ability } from "./types";
 
 // Poderes de teste (personagem genérico) — só pra validar o sistema.
 // Poderes de anime de verdade entram aqui depois, como novas receitas.
-export const ABILITIES: Record<string, Ability> = {
+export const ABILITIES = {
   bolaDeEnergia: {
     id: "bolaDeEnergia",
     name: "Bola de Energia",
@@ -53,4 +53,6 @@ export const ABILITIES: Record<string, Ability> = {
     effect: { kind: "damage", amount: 80 },
     vfx: { color: "#ff3b3b", particle: "nova", sound: "boom" },
   },
-};
+} satisfies Record<string, Ability>;
+
+export type AbilityId = keyof typeof ABILITIES;

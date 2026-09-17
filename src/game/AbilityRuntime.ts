@@ -1,5 +1,5 @@
 import type { Ability } from "../abilities/types";
-import { ABILITIES } from "../abilities/abilities";
+import { ABILITIES, type AbilityId } from "../abilities/abilities";
 import type { CharacterDef } from "../characters/types";
 
 export interface CastResult {
@@ -12,18 +12,20 @@ export interface CastResult {
 export class AbilityRuntime {
   health: number;
   energy: number;
-  private readonly maxEnergy: number;
+  readonly maxHealth: number;
+  readonly maxEnergy: number;
   private readonly regenPerSec: number;
-  private cooldownUntil = new Map<string, number>();
+  private cooldownUntil = new Map<AbilityId, number>();
 
   constructor(private readonly character: CharacterDef) {
     this.health = character.stats.health;
     this.energy = character.stats.energy;
+    this.maxHealth = character.stats.health;
     this.maxEnergy = character.stats.energy;
     this.regenPerSec = character.stats.energyRegenPerSec;
   }
 
-  get slots(): { key: string; abilityId: string }[] {
+  get slots(): { key: string; abilityId: AbilityId }[] {
     const l = this.character.loadout;
     return [
       { key: "1", abilityId: l.common[0] },
@@ -38,13 +40,13 @@ export class AbilityRuntime {
     this.energy = Math.min(this.maxEnergy, this.energy + this.regenPerSec * dtSeconds);
   }
 
-  canCast(abilityId: string, now: number): boolean {
+  canCast(abilityId: AbilityId, now: number): boolean {
     const ability = ABILITIES[abilityId];
     const readyAt = this.cooldownUntil.get(abilityId) ?? 0;
     return now >= readyAt && this.energy >= ability.cost;
   }
 
-  tryCast(abilityId: string, now: number): CastResult | null {
+  tryCast(abilityId: AbilityId, now: number): CastResult | null {
     if (!this.canCast(abilityId, now)) return null;
     const ability = ABILITIES[abilityId];
     this.energy -= ability.cost;
@@ -52,7 +54,7 @@ export class AbilityRuntime {
     return { ability };
   }
 
-  cooldownRemaining(abilityId: string, now: number): number {
+  cooldownRemaining(abilityId: AbilityId, now: number): number {
     const readyAt = this.cooldownUntil.get(abilityId) ?? 0;
     return Math.max(0, readyAt - now);
   }

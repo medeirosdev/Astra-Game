@@ -151,14 +151,20 @@ export class Engine {
     }
   }
 
+  private removeProjectile(index: number) {
+    const [p] = this.projectiles.splice(index, 1);
+    this.scene.remove(p.mesh);
+    p.mesh.geometry.dispose();
+    (p.mesh.material as THREE.Material).dispose();
+  }
+
   private updateProjectiles(dt: number) {
     const now = performance.now();
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
       p.mesh.position.addScaledVector(p.velocity, dt);
       if (now - p.bornAt > 3000) {
-        this.scene.remove(p.mesh);
-        this.projectiles.splice(i, 1);
+        this.removeProjectile(i);
       }
     }
   }

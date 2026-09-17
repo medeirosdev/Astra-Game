@@ -7,6 +7,7 @@ export class Hud {
   private readonly healthFill: HTMLDivElement;
   private readonly energyFill: HTMLDivElement;
   private readonly slotEls: HTMLDivElement[] = [];
+  private readonly cooldownEls: HTMLDivElement[] = [];
   private readonly peerCountEl: HTMLDivElement;
 
   constructor(container: HTMLElement, character: CharacterDef) {
@@ -42,9 +43,22 @@ export class Hud {
       const ability = ABILITIES[abilityId];
       const slotEl = document.createElement("div");
       slotEl.className = `hud-slot tier-${ability.tier}`;
-      slotEl.innerHTML = `<span class="key">${i + 1}</span><span class="name">${ability.name}</span><div class="cooldown"></div>`;
+
+      const keyEl = document.createElement("span");
+      keyEl.className = "key";
+      keyEl.textContent = String(i + 1);
+
+      const nameEl = document.createElement("span");
+      nameEl.className = "name";
+      nameEl.textContent = ability.name;
+
+      const cooldownEl = document.createElement("div");
+      cooldownEl.className = "cooldown";
+
+      slotEl.append(keyEl, nameEl, cooldownEl);
       slots.appendChild(slotEl);
       this.slotEls.push(slotEl);
+      this.cooldownEls.push(cooldownEl);
     });
 
     this.peerCountEl = document.createElement("div");
@@ -59,15 +73,16 @@ export class Hud {
   }
 
   update(runtime: AbilityRuntime, now: number) {
-    this.healthFill.style.width = `${Math.max(0, runtime.health)}%`;
-    this.energyFill.style.width = `${(runtime.energy / 100) * 100}%`;
+    const healthPct = (Math.max(0, runtime.health) / runtime.maxHealth) * 100;
+    const energyPct = (Math.max(0, runtime.energy) / runtime.maxEnergy) * 100;
+    this.healthFill.style.width = `${Math.min(100, healthPct)}%`;
+    this.energyFill.style.width = `${Math.min(100, energyPct)}%`;
 
     runtime.slots.forEach(({ abilityId }, i) => {
       const ability = ABILITIES[abilityId];
       const remaining = runtime.cooldownRemaining(abilityId, now);
       const pct = remaining / ability.cooldownMs;
-      const cd = this.slotEls[i].querySelector(".cooldown") as HTMLDivElement;
-      cd.style.height = `${Math.max(0, pct) * 100}%`;
+      this.cooldownEls[i].style.height = `${Math.max(0, pct) * 100}%`;
       this.slotEls[i].classList.toggle("ready", remaining === 0);
     });
   }
