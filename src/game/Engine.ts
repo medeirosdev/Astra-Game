@@ -155,6 +155,12 @@ export class Engine {
     remote.target.set(position.x, position.y, position.z);
   }
 
+  setRemotePlayerColor(peerId: string, color: string) {
+    const remote = this.remotePlayers.get(peerId);
+    if (!remote) return;
+    (remote.mesh.material as THREE.MeshStandardMaterial).color.set(color);
+  }
+
   removeRemotePlayer(peerId: string) {
     const remote = this.remotePlayers.get(peerId);
     if (!remote) return;

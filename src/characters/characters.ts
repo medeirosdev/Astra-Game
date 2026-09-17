@@ -1,8 +1,8 @@
 import type { CharacterDef } from "./types";
 
-// Personagem de teste — valida o loadout de 5 poderes antes de desenhar
-// qualquer personagem de anime de verdade.
-export const CHARACTERS: Record<string, CharacterDef> = {
+// Personagens de teste — validam o loadout de 5 poderes e dão variedade
+// de jogo antes de desenhar qualquer personagem de anime de verdade.
+export const CHARACTERS = {
   testador: {
     id: "testador",
     name: "Testador",
@@ -14,4 +14,22 @@ export const CHARACTERS: Record<string, CharacterDef> = {
       super: "explosaoDefinitiva",
     },
   },
-};
+  guardiao: {
+    id: "guardiao",
+    name: "Guardião",
+    color: "#7dffb3",
+    stats: { health: 140, energy: 90, energyRegenPerSec: 7, moveSpeed: 5 },
+    loadout: {
+      common: ["toqueEletrico", "curaRapida"],
+      strong: ["domoDeProtecao", "investidaFeroz"],
+      super: "tempestadeDeGelo",
+    },
+  },
+} satisfies Record<string, CharacterDef>;
+
+export type CharacterId = keyof typeof CHARACTERS;
+
+// Mesma lógica de isAbilityId: id de personagem vindo de outro peer não é confiável.
+export function isCharacterId(value: string): value is CharacterId {
+  return value in CHARACTERS;
+}

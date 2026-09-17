@@ -3,20 +3,20 @@ import { Engine } from "./game/Engine";
 import { Hud } from "./ui/hud";
 import { showMenu, showRoomCode } from "./ui/menu";
 import { connectToRoom } from "./network/room";
-import { setupSync, colorForPeer } from "./network/sync";
-import { CHARACTERS } from "./characters/characters";
+import { setupSync, PLACEHOLDER_COLOR } from "./network/sync";
+import { CHARACTERS, isCharacterId } from "./characters/characters";
 import { ABILITIES, isAbilityId } from "./abilities/abilities";
 
 const POSITION_SYNC_HZ = 15;
 
 async function main() {
   const app = document.getElementById("app")!;
-  const { code } = await showMenu(app);
+  const { code, characterId } = await showMenu(app);
   showRoomCode(app, code);
 
   const room = connectToRoom(code);
   const sync = setupSync(room);
-  const character = CHARACTERS.testador;
+  const character = CHARACTERS[characterId];
 
   const hud = new Hud(app, character);
   const engine = new Engine(app, character, (runtime) => hud.update(runtime, performance.now()));
@@ -24,13 +24,18 @@ async function main() {
   let peerCount = 0;
   room.onPeerJoin((peerId) => {
     hud.setPeerCount(++peerCount);
-    engine.spawnRemotePlayer(peerId, colorForPeer(peerId));
+    engine.spawnRemotePlayer(peerId, PLACEHOLDER_COLOR);
+    sync.sendHello({ characterId }, peerId);
   });
   room.onPeerLeave((peerId) => {
     hud.setPeerCount(--peerCount);
     engine.removeRemotePlayer(peerId);
   });
 
+  sync.onHello(({ characterId: remoteCharacterId }, peerId) => {
+    if (!isCharacterId(remoteCharacterId)) return;
+    engine.setRemotePlayerColor(peerId, CHARACTERS[remoteCharacterId].color);
+  });
   sync.onPosition((position, peerId) => engine.updateRemotePlayer(peerId, position));
   sync.onCast(({ abilityId, x, y, z }) => {
     if (!isAbilityId(abilityId)) return;
