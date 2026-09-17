@@ -117,14 +117,18 @@ export class Engine {
   }
 
   private updateMovement(dt: number) {
-    const move = new THREE.Vector3();
-    if (this.keys.has("w")) move.z -= 1;
-    if (this.keys.has("s")) move.z += 1;
-    if (this.keys.has("a")) move.x -= 1;
-    if (this.keys.has("d")) move.x += 1;
-    if (move.lengthSq() > 0) {
-      move.normalize().multiplyScalar(this.moveSpeed * dt);
-      this.player.position.add(move);
+    const now = performance.now();
+    if (!this.runtime.isStunned(now)) {
+      const move = new THREE.Vector3();
+      if (this.keys.has("w")) move.z -= 1;
+      if (this.keys.has("s")) move.z += 1;
+      if (this.keys.has("a")) move.x -= 1;
+      if (this.keys.has("d")) move.x += 1;
+      if (move.lengthSq() > 0) {
+        const speed = this.moveSpeed * this.runtime.getSpeedFactor(now);
+        move.normalize().multiplyScalar(speed * dt);
+        this.player.position.add(move);
+      }
     }
 
     this.camera.position.lerp(

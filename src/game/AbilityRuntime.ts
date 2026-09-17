@@ -1,4 +1,4 @@
-import type { Ability } from "../abilities/types";
+import type { Ability, AbilityEffect } from "../abilities/types";
 import { ABILITIES, type AbilityId } from "../abilities/abilities";
 import type { CharacterDef } from "../characters/types";
 
@@ -6,9 +6,14 @@ export interface CastResult {
   ability: Ability;
 }
 
-// Controla energia e cooldown de um personagem em jogo.
-// Regra: quem decide se um cast é válido é sempre quem roda essa classe
-// no host (ver about.md, seção "quem decide o que aconteceu").
+// Controla vida, energia, cooldown e status (stun/slow/buff) de um
+// personagem em jogo. Regra de acerto (ver about.md e ROADMAP.md, Fase 3):
+// quem decide se FOI atingido é sempre o alvo, não quem atacou — cada
+// cliente aplica applyEffect() em si mesmo ao concluir que um cast recebido
+// o acertou (ver src/game/combat.ts). Evita a disputa "eu acertei"/"não
+// acertou" sem precisar de um host árbitro; entre amigos, tanto faz alguém
+// rodar um cliente modificado que ignora isso (mesma ressalva já aceita
+// pra P2P em geral).
 export class AbilityRuntime {
   health: number;
   energy: number;
@@ -16,6 +21,9 @@ export class AbilityRuntime {
   readonly maxEnergy: number;
   private readonly regenPerSec: number;
   private cooldownUntil = new Map<AbilityId, number>();
+  private stunnedUntil = 0;
+  private speedFactor = 1;
+  private speedFactorUntil = 0;
 
   constructor(private readonly character: CharacterDef) {
     this.health = character.stats.health;
@@ -57,5 +65,32 @@ export class AbilityRuntime {
   cooldownRemaining(abilityId: AbilityId, now: number): number {
     const readyAt = this.cooldownUntil.get(abilityId) ?? 0;
     return Math.max(0, readyAt - now);
+  }
+
+  applyEffect(effect: AbilityEffect, now: number) {
+    switch (effect.kind) {
+      case "damage":
+        this.health = Math.max(0, this.health - effect.amount);
+        break;
+      case "heal":
+        this.health = Math.min(this.maxHealth, this.health + effect.amount);
+        break;
+      case "stun":
+        this.stunnedUntil = Math.max(this.stunnedUntil, now + effect.durationMs);
+        break;
+      case "slow":
+      case "speedBuff":
+        this.speedFactor = effect.factor;
+        this.speedFactorUntil = now + effect.durationMs;
+        break;
+    }
+  }
+
+  isStunned(now: number): boolean {
+    return now < this.stunnedUntil;
+  }
+
+  getSpeedFactor(now: number): number {
+    return now < this.speedFactorUntil ? this.speedFactor : 1;
   }
 }

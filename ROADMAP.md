@@ -24,14 +24,14 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 - [x] Sincronizar posição entre peers (15hz, com lerp no destino pra suavizar)
 - [ ] Sincronizar rotação/direção do personagem (hoje o personagem remoto não vira pro lado que anda)
 - [x] Sincronizar cast de habilidade (todo mundo vê o efeito visual, não só quem usou)
-- [ ] Host autoritativo decide dano/acerto real (ver regra em `about.md`) — ainda não existe aplicação de dano nenhuma (ver Fase 3)
+- [x] Regra de acerto revisada: em vez de host autoritativo, cada cliente decide se FOI atingido por um cast recebido e aplica o efeito em si mesmo (`src/game/combat.ts`) — mais simples que eleger/manter um host árbitro, sem ponto único de falha, mesma garantia contra a disputa "eu acertei"/"não acertou" (ver `about.md` e skill `review`)
 - [x] Trocado Trystero (trackers públicos do WebTorrent) por servidor de sinalização próprio (`server/index.js`) — os trackers padrão se mostraram frágeis demais na prática (metade fora do ar); testado localmente (2 navegadores automatizados) com handshake WebRTC completo (`iceConnectionState: connected`)
-- [ ] Testar com você e uma pessoa de verdade em dispositivos diferentes (o teste automatizado foi na mesma máquina — ainda falta confirmar em dispositivos reais)
+- [x] Testar com você e uma pessoa de verdade em dispositivos diferentes — funcionou
 
 ## Fase 3 — Combate de verdade
-- [ ] Sistema de alvo/hitbox: projétil e área realmente acertam outro jogador (ou mob)
-- [ ] Aplicar o `effect` da habilidade no alvo (dano, cura, stun, slow, speedBuff) — hoje é só visual
-- [ ] Morte/respawn de jogador
+- [x] Sistema de alvo/hitbox: instant/area checam distância até o alvo; projétil simula a trajetória e checa o segmento percorrido a cada tick (evita "atravessar" o alvo entre checagens — bug real encontrado e corrigido num teste automatizado)
+- [x] Aplicar o `effect` da habilidade no alvo (dano, cura, stun, slow, speedBuff) — `AbilityRuntime.applyEffect`, verificado ponta a ponta (dois navegadores reais, vida caindo de 100% pra 88%/75% conforme a habilidade)
+- [ ] Morte/respawn de jogador (hoje a vida vai a 0 e para; não acontece nada especial)
 
 ## Fase 4 — Modo Sobrevivência
 - [ ] Spawn de mobs em ondas

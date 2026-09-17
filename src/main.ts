@@ -6,6 +6,7 @@ import { connectToRoom } from "./network/room";
 import { setupSync, PLACEHOLDER_COLOR } from "./network/sync";
 import { CHARACTERS, isCharacterId } from "./characters/characters";
 import { ABILITIES, isAbilityId } from "./abilities/abilities";
+import { resolveIncomingCast } from "./game/combat";
 
 const POSITION_SYNC_HZ = 15;
 
@@ -42,7 +43,11 @@ async function main() {
   sync.onPosition((position, peerId) => engine.updateRemotePlayer(peerId, position));
   sync.onCast(({ abilityId, x, y, z }) => {
     if (!isAbilityId(abilityId)) return;
-    engine.castAbilityAt(ABILITIES[abilityId], { x, y, z });
+    const ability = ABILITIES[abilityId];
+    engine.castAbilityAt(ability, { x, y, z });
+    resolveIncomingCast(ability, { x, y, z }, () => engine.getLocalPosition(), () =>
+      engine.runtime.applyEffect(ability.effect, performance.now()),
+    );
   });
 
   setInterval(() => sync.sendPosition(engine.getLocalPosition()), 1000 / POSITION_SYNC_HZ);
@@ -57,11 +62,15 @@ async function main() {
   }, 5000);
 
   window.addEventListener("keydown", (e) => {
+    const now = performance.now();
+    if (engine.runtime.isStunned(now)) return;
     const slot = engine.runtime.slots.find((s) => s.key === e.key);
     if (!slot) return;
-    const cast = engine.runtime.tryCast(slot.abilityId, performance.now());
+    const cast = engine.runtime.tryCast(slot.abilityId, now);
     if (!cast) return;
-    engine.castAbility(ABILITIES[slot.abilityId]);
+    const ability = ABILITIES[slot.abilityId];
+    engine.castAbility(ability);
+    if (ability.target.kind === "self") engine.runtime.applyEffect(ability.effect, now);
     sync.sendCast({ abilityId: slot.abilityId, ...engine.getLocalPosition() });
   });
 

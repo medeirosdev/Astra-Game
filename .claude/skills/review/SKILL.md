@@ -28,9 +28,11 @@ O sistema de habilidades (ver `about.md`, seção "sistema de habilidades") é *
 
 Se uma ideia realmente não cabe no formato atual de `Ability`, isso é sinal para propor uma extensão do tipo (`AbilityEffect`/`AbilityTargetType`), não para abrir uma exceção pontual.
 
-## 3. Autoridade do host
+## 3. Quem decide um acerto é o alvo, não quem atacou
 
-A regra combinada no design (`about.md`) é: quem decide o resultado real de uma habilidade (dano, quem foi atingido) é sempre o host; os outros peers só mostram o efeito visual. Ao revisar qualquer código de rede (`src/network/`) ou que mexa em dano/vida, confira se essa regra está sendo respeitada — cliente decidindo dano sozinho é bug de design, não só de implementação.
+A regra combinada no design (`about.md`, `AbilityRuntime.ts`) mudou de "host decide" pra **auto-autoritativo**: cada cliente decide, pra si mesmo, se um cast recebido de outro peer o atingiu (`src/game/combat.ts`), e só então aplica o efeito na própria `AbilityRuntime`. Ninguém aplica dano/stun/slow em outro peer diretamente — o cast é só um broadcast do que aconteceu do lado de quem atacou (posição, habilidade usada); quem foi "atingido" ou não é sempre decisão de quem recebeu. Efeitos com alvo `self` (cura, buff) são a exceção: aplicam na hora, no próprio cliente que castou, sem depender de ninguém.
+
+Ao revisar qualquer código de combate/rede, sinalize: cliente aplicando efeito em OUTRO peer diretamente (deveria só mandar o cast e deixar o alvo decidir), ou um host/árbitro central sendo reintroduzido sem necessidade — o modelo atual dispensa isso de propósito (mais simples, sem eleição de host, sem ponto único de falha).
 
 ## 4. Three.js — vazamento de recursos
 
@@ -49,4 +51,4 @@ Toda `THREE.Mesh`/`BufferGeometry`/`Material` criada dinamicamente (projéteis, 
 
 ## 7. Saída
 
-Reporte os achados divididos em **bloqueadores** (build quebrado, autoridade do host violada, vazamento de recurso, XSS) e **sugestões** (estilo, nomeação, oportunidade de simplificar). Não aprove uma contribuição com bloqueador pendente.
+Reporte os achados divididos em **bloqueadores** (build quebrado, regra de "quem decide o acerto" violada, vazamento de recurso, XSS) e **sugestões** (estilo, nomeação, oportunidade de simplificar). Não aprove uma contribuição com bloqueador pendente.
