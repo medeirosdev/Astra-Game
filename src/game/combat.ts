@@ -31,17 +31,21 @@ function pointToSegmentDistance(p0: Vec3, p1: Vec3, q: Vec3): number {
 }
 
 // Réplica da trajetória visual em Engine.castAbilityAt (origem + offset
-// (0, 0.5, -1), viajando em -Z na velocidade da habilidade) — precisa bater
+// (0, 0.5, 0) + 1 unidade na direção que o personagem tava olhando (yaw),
+// viajando nessa mesma direção na velocidade da habilidade) — precisa bater
 // com o que é renderizado pra "fui atingido" fazer sentido pro jogador.
-function projectilePositionAt(origin: Vec3, speed: number, elapsedSeconds: number): Vec3 {
-  return { x: origin.x, y: origin.y + 0.5, z: origin.z - 1 - speed * elapsedSeconds };
+function projectilePositionAt(origin: Vec3, yaw: number, speed: number, elapsedSeconds: number): Vec3 {
+  const forwardX = -Math.sin(yaw);
+  const forwardZ = -Math.cos(yaw);
+  const traveled = 1 + speed * elapsedSeconds;
+  return { x: origin.x + forwardX * traveled, y: origin.y + 0.5, z: origin.z + forwardZ * traveled };
 }
 
 // Cada cliente decide, pra si mesmo, se um cast recebido de outro peer o
 // atingiu (ver regra em AbilityRuntime) — chama onHit() quando concluir que
 // sim. Instant/area resolvem na hora; projétil precisa simular a trajetória
 // porque leva tempo pra "chegar".
-export function resolveIncomingCast(ability: Ability, origin: Vec3, getMyPosition: () => Vec3, onHit: () => void) {
+export function resolveIncomingCast(ability: Ability, origin: Vec3, yaw: number, getMyPosition: () => Vec3, onHit: () => void) {
   if (ability.target.kind === "instant") {
     if (distance(origin, getMyPosition()) <= MELEE_RANGE) onHit();
     return;
@@ -55,14 +59,14 @@ export function resolveIncomingCast(ability: Ability, origin: Vec3, getMyPositio
   if (ability.target.kind === "projectile") {
     const speed = ability.target.speed;
     const startedAt = performance.now();
-    let lastPos = projectilePositionAt(origin, speed, 0);
+    let lastPos = projectilePositionAt(origin, yaw, speed, 0);
     const interval = setInterval(() => {
       const elapsedMs = performance.now() - startedAt;
       if (elapsedMs > PROJECTILE_LIFETIME_MS) {
         clearInterval(interval);
         return;
       }
-      const currentPos = projectilePositionAt(origin, speed, elapsedMs / 1000);
+      const currentPos = projectilePositionAt(origin, yaw, speed, elapsedMs / 1000);
       if (pointToSegmentDistance(lastPos, currentPos, getMyPosition()) <= PROJECTILE_HIT_RADIUS) {
         clearInterval(interval);
         onHit();

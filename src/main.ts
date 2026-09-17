@@ -40,17 +40,17 @@ async function main() {
     if (!isCharacterId(remoteCharacterId)) return;
     engine.setRemotePlayerColor(peerId, CHARACTERS[remoteCharacterId].color);
   });
-  sync.onPosition((position, peerId) => engine.updateRemotePlayer(peerId, position));
-  sync.onCast(({ abilityId, x, y, z }) => {
+  sync.onPosition((transform, peerId) => engine.updateRemotePlayer(peerId, transform));
+  sync.onCast(({ abilityId, x, y, z, yaw }) => {
     if (!isAbilityId(abilityId)) return;
     const ability = ABILITIES[abilityId];
-    engine.castAbilityAt(ability, { x, y, z });
-    resolveIncomingCast(ability, { x, y, z }, () => engine.getLocalPosition(), () =>
+    engine.castAbilityAt(ability, { x, y, z }, yaw);
+    resolveIncomingCast(ability, { x, y, z }, yaw, () => engine.getLocalTransform(), () =>
       engine.runtime.applyEffect(ability.effect, performance.now()),
     );
   });
 
-  setInterval(() => sync.sendPosition(engine.getLocalPosition()), 1000 / POSITION_SYNC_HZ);
+  setInterval(() => sync.sendPosition(engine.getLocalTransform()), 1000 / POSITION_SYNC_HZ);
 
   // Diagnóstico: RTCPeerConnection pode existir (sinalização encontrou o outro
   // peer) mesmo sem nunca conectar de fato (ICE falhou — ex: rede bloqueando
@@ -71,7 +71,7 @@ async function main() {
     const ability = ABILITIES[slot.abilityId];
     engine.castAbility(ability);
     if (ability.target.kind === "self") engine.runtime.applyEffect(ability.effect, now);
-    sync.sendCast({ abilityId: slot.abilityId, ...engine.getLocalPosition() });
+    sync.sendCast({ abilityId: slot.abilityId, ...engine.getLocalTransform() });
   });
 
   engine.start();

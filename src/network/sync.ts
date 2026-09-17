@@ -4,6 +4,7 @@ export interface PositionPayload {
   x: number;
   y: number;
   z: number;
+  yaw: number;
 }
 
 export interface CastPayload {
@@ -11,6 +12,7 @@ export interface CastPayload {
   x: number;
   y: number;
   z: number;
+  yaw: number;
 }
 
 export interface HelloPayload {
@@ -20,9 +22,9 @@ export interface HelloPayload {
 // Cor neutra usada até o "hello" do peer chegar dizendo qual personagem ele escolheu.
 export const PLACEHOLDER_COLOR = "#888888";
 
-// Ações da sala: posição do jogador e cast de habilidade, replicadas pra
-// todo peer conectado. Dano real (ver about.md) ainda depende de um dono da
-// partida decidir o resultado — aqui só propaga o que já foi decidido localmente.
+// Ações da sala: posição+direção do jogador e cast de habilidade, replicadas
+// pra todo peer conectado. Quem decide se um cast acertou é sempre o alvo
+// (ver AbilityRuntime.ts) — aqui só propaga o que já foi decidido localmente.
 export function setupSync(room: GameRoom) {
   const [sendPosition, onPosition] = room.makeAction<PositionPayload>("pos");
   const [sendCast, onCast] = room.makeAction<CastPayload>("cast");

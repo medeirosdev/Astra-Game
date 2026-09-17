@@ -9,6 +9,12 @@ import { AbilityRuntime } from "./AbilityRuntime";
 
 const GRID_SIZE = 24;
 const BLOCK_SIZE = 1;
+const UP = new THREE.Vector3(0, 1, 0);
+const CAMERA_DISTANCE = 11;
+const CAMERA_HEIGHT = 2;
+const MIN_PITCH = -0.2;
+const MAX_PITCH = 1.3;
+const MOUSE_SENSITIVITY = 0.0025;
 
 interface Projectile {
   mesh: THREE.Mesh;
@@ -19,6 +25,14 @@ interface Projectile {
 interface RemotePlayer {
   mesh: THREE.Mesh;
   target: THREE.Vector3;
+  yaw: number;
+}
+
+export interface Transform {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
 }
 
 export class Engine {
@@ -32,6 +46,8 @@ export class Engine {
   private readonly projectiles: Projectile[] = [];
   private readonly remotePlayers = new Map<string, RemotePlayer>();
   private readonly moveSpeed: number;
+  private yaw = 0;
+  private pitch = 0.5;
   readonly runtime: AbilityRuntime;
 
   private readonly onHudUpdate: (runtime: AbilityRuntime) => void;
@@ -73,6 +89,29 @@ export class Engine {
     window.addEventListener("resize", () => this.onResize());
     window.addEventListener("keydown", (e) => this.keys.add(e.key.toLowerCase()));
     window.addEventListener("keyup", (e) => this.keys.delete(e.key.toLowerCase()));
+
+    this.setupMouseLook(container);
+  }
+
+  private setupMouseLook(container: HTMLElement) {
+    const hint = document.createElement("div");
+    hint.className = "mouse-hint";
+    hint.textContent = "Clique na tela para travar o mouse e olhar em volta";
+    container.appendChild(hint);
+
+    this.renderer.domElement.addEventListener("click", () => {
+      this.renderer.domElement.requestPointerLock();
+    });
+
+    document.addEventListener("pointerlockchange", () => {
+      hint.style.display = document.pointerLockElement === this.renderer.domElement ? "none" : "block";
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (document.pointerLockElement !== this.renderer.domElement) return;
+      this.yaw -= e.movementX * MOUSE_SENSITIVITY;
+      this.pitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, this.pitch + e.movementY * MOUSE_SENSITIVITY));
+    });
   }
 
   private setupLights() {
@@ -116,14 +155,22 @@ export class Engine {
     this.composer.setSize(window.innerWidth, window.innerHeight);
   }
 
+  private forward(): THREE.Vector3 {
+    return new THREE.Vector3(0, 0, -1).applyAxisAngle(UP, this.yaw);
+  }
+
   private updateMovement(dt: number) {
+    this.player.rotation.y = this.yaw;
+
     const now = performance.now();
     if (!this.runtime.isStunned(now)) {
+      const forward = this.forward();
+      const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(UP, this.yaw);
       const move = new THREE.Vector3();
-      if (this.keys.has("w")) move.z -= 1;
-      if (this.keys.has("s")) move.z += 1;
-      if (this.keys.has("a")) move.x -= 1;
-      if (this.keys.has("d")) move.x += 1;
+      if (this.keys.has("w")) move.add(forward);
+      if (this.keys.has("s")) move.sub(forward);
+      if (this.keys.has("a")) move.sub(right);
+      if (this.keys.has("d")) move.add(right);
       if (move.lengthSq() > 0) {
         const speed = this.moveSpeed * this.runtime.getSpeedFactor(now);
         move.normalize().multiplyScalar(speed * dt);
@@ -131,15 +178,24 @@ export class Engine {
       }
     }
 
-    this.camera.position.lerp(
-      new THREE.Vector3(this.player.position.x, this.player.position.y + 7, this.player.position.z + 10),
-      0.1,
-    );
-    this.camera.lookAt(this.player.position);
+    this.updateCamera();
   }
 
-  getLocalPosition(): { x: number; y: number; z: number } {
-    return { x: this.player.position.x, y: this.player.position.y, z: this.player.position.z };
+  private updateCamera() {
+    const offsetX = Math.sin(this.yaw) * Math.cos(this.pitch) * CAMERA_DISTANCE;
+    const offsetZ = Math.cos(this.yaw) * Math.cos(this.pitch) * CAMERA_DISTANCE;
+    const offsetY = CAMERA_HEIGHT + Math.sin(this.pitch) * CAMERA_DISTANCE;
+    const desired = new THREE.Vector3(
+      this.player.position.x + offsetX,
+      this.player.position.y + offsetY,
+      this.player.position.z + offsetZ,
+    );
+    this.camera.position.lerp(desired, 0.2);
+    this.camera.lookAt(this.player.position.x, this.player.position.y + 1, this.player.position.z);
+  }
+
+  getLocalTransform(): Transform {
+    return { x: this.player.position.x, y: this.player.position.y, z: this.player.position.z, yaw: this.yaw };
   }
 
   spawnRemotePlayer(peerId: string, color: string) {
@@ -150,13 +206,14 @@ export class Engine {
     mesh.position.set(0, 1, 0);
     mesh.castShadow = true;
     this.scene.add(mesh);
-    this.remotePlayers.set(peerId, { mesh, target: mesh.position.clone() });
+    this.remotePlayers.set(peerId, { mesh, target: mesh.position.clone(), yaw: 0 });
   }
 
-  updateRemotePlayer(peerId: string, position: { x: number; y: number; z: number }) {
+  updateRemotePlayer(peerId: string, transform: Transform) {
     const remote = this.remotePlayers.get(peerId);
     if (!remote) return;
-    remote.target.set(position.x, position.y, position.z);
+    remote.target.set(transform.x, transform.y, transform.z);
+    remote.yaw = transform.yaw;
   }
 
   setRemotePlayerColor(peerId: string, color: string) {
@@ -177,16 +234,18 @@ export class Engine {
   private updateRemotePlayers() {
     for (const remote of this.remotePlayers.values()) {
       remote.mesh.position.lerp(remote.target, 0.25);
+      remote.mesh.rotation.y = remote.yaw;
     }
   }
 
   castAbility(ability: Ability) {
-    this.castAbilityAt(ability, this.player.position);
+    this.castAbilityAt(ability, this.player.position, this.yaw);
   }
 
-  castAbilityAt(ability: Ability, origin: { x: number; y: number; z: number }) {
+  castAbilityAt(ability: Ability, origin: { x: number; y: number; z: number }, yaw = 0) {
     const originVec = new THREE.Vector3(origin.x, origin.y, origin.z);
     if (ability.target.kind === "projectile") {
+      const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(UP, yaw);
       const geo = new THREE.SphereGeometry(0.25, 12, 12);
       const mat = new THREE.MeshStandardMaterial({
         color: ability.vfx.color,
@@ -194,8 +253,8 @@ export class Engine {
         emissiveIntensity: 2,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.copy(originVec).add(new THREE.Vector3(0, 0.5, -1));
-      const velocity = new THREE.Vector3(0, 0, -1).multiplyScalar(ability.target.speed);
+      mesh.position.copy(originVec).add(new THREE.Vector3(0, 0.5, 0)).addScaledVector(forward, 1);
+      const velocity = forward.clone().multiplyScalar(ability.target.speed);
       this.scene.add(mesh);
       this.projectiles.push({ mesh, velocity, bornAt: performance.now() });
     }

@@ -14,6 +14,7 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 - [x] Scaffold Vite + TypeScript + Three.js + WebRTC (rede)
 - [x] Menu de criar/entrar em sala por código
 - [x] Cena 3D: chão voxel, luz + bloom, personagem de teste com movimento (WASD)
+- [x] Câmera de verdade: clique pra travar o mouse, orbital ao redor do personagem (yaw/pitch), movimento e direção dos poderes relativos à câmera — não fixos em -Z
 - [x] Sistema de habilidades como dados (`src/abilities`) + runtime de cooldown/energia
 - [x] Personagem de teste com loadout completo (5 poderes) + HUD (vida, energia, cooldowns)
 - [x] Skills de projeto (`review`, `create-content`) para revisão e criação de conteúdo consistentes
@@ -22,7 +23,7 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 ## Fase 2 — Multiplayer de verdade
 - [x] Ao entrar na sala, jogadores se veem no mundo (spawn de personagem remoto por peer)
 - [x] Sincronizar posição entre peers (15hz, com lerp no destino pra suavizar)
-- [ ] Sincronizar rotação/direção do personagem (hoje o personagem remoto não vira pro lado que anda)
+- [x] Sincronizar rotação/direção do personagem (yaw vai junto na posição; personagem remoto vira pro lado certo)
 - [x] Sincronizar cast de habilidade (todo mundo vê o efeito visual, não só quem usou)
 - [x] Regra de acerto revisada: em vez de host autoritativo, cada cliente decide se FOI atingido por um cast recebido e aplica o efeito em si mesmo (`src/game/combat.ts`) — mais simples que eleger/manter um host árbitro, sem ponto único de falha, mesma garantia contra a disputa "eu acertei"/"não acertou" (ver `about.md` e skill `review`)
 - [x] Trocado Trystero (trackers públicos do WebTorrent) por servidor de sinalização próprio (`server/index.js`) — os trackers padrão se mostraram frágeis demais na prática (metade fora do ar); testado localmente (2 navegadores automatizados) com handshake WebRTC completo (`iceConnectionState: connected`)
