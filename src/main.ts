@@ -17,17 +17,20 @@ async function main() {
   const room = connectToRoom(code);
   const sync = setupSync(room);
   const character = CHARACTERS[characterId];
+  console.log(`[astra] entrando na sala "${code}" como ${character.name}`);
 
   const hud = new Hud(app, character);
   const engine = new Engine(app, character, (runtime) => hud.update(runtime, performance.now()));
 
   let peerCount = 0;
   room.onPeerJoin((peerId) => {
+    console.log("[astra] peer conectou:", peerId);
     hud.setPeerCount(++peerCount);
     engine.spawnRemotePlayer(peerId, PLACEHOLDER_COLOR);
     sync.sendHello({ characterId }, peerId);
   });
   room.onPeerLeave((peerId) => {
+    console.log("[astra] peer saiu:", peerId);
     hud.setPeerCount(--peerCount);
     engine.removeRemotePlayer(peerId);
   });

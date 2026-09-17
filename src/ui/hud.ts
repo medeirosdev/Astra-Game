@@ -66,6 +66,7 @@ export class Hud {
 
     this.root.append(bars, slots, this.peerCountEl);
     container.appendChild(this.root);
+    this.setPeerCount(0);
   }
 
   setPeerCount(count: number) {
