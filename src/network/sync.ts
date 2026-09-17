@@ -4,7 +4,6 @@ export interface PositionPayload {
   x: number;
   y: number;
   z: number;
-  [key: string]: number;
 }
 
 export interface CastPayload {
@@ -12,12 +11,10 @@ export interface CastPayload {
   x: number;
   y: number;
   z: number;
-  [key: string]: string | number;
 }
 
 export interface HelloPayload {
   characterId: string;
-  [key: string]: string;
 }
 
 // Cor neutra usada até o "hello" do peer chegar dizendo qual personagem ele escolheu.

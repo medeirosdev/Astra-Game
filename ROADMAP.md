@@ -11,7 +11,7 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 
 ## Fase 1 — Fundação técnica
 - [x] Repositório criado e publicado (`medeirosdev/Astra-Game`)
-- [x] Scaffold Vite + TypeScript + Three.js + Trystero
+- [x] Scaffold Vite + TypeScript + Three.js + WebRTC (rede)
 - [x] Menu de criar/entrar em sala por código
 - [x] Cena 3D: chão voxel, luz + bloom, personagem de teste com movimento (WASD)
 - [x] Sistema de habilidades como dados (`src/abilities`) + runtime de cooldown/energia
@@ -25,7 +25,8 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 - [ ] Sincronizar rotação/direção do personagem (hoje o personagem remoto não vira pro lado que anda)
 - [x] Sincronizar cast de habilidade (todo mundo vê o efeito visual, não só quem usou)
 - [ ] Host autoritativo decide dano/acerto real (ver regra em `about.md`) — ainda não existe aplicação de dano nenhuma (ver Fase 3)
-- [ ] Testar com 2 navegadores/abas em redes diferentes (checar NAT/TURN na prática) — ainda não verificado manualmente
+- [x] Trocado Trystero (trackers públicos do WebTorrent) por servidor de sinalização próprio (`server/index.js`) — os trackers padrão se mostraram frágeis demais na prática (metade fora do ar); testado localmente (2 navegadores automatizados) com handshake WebRTC completo (`iceConnectionState: connected`)
+- [ ] Testar com você e uma pessoa de verdade em dispositivos diferentes (o teste automatizado foi na mesma máquina — ainda falta confirmar em dispositivos reais)
 
 ## Fase 3 — Combate de verdade
 - [ ] Sistema de alvo/hitbox: projétil e área realmente acertam outro jogador (ou mob)
@@ -56,5 +57,6 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 
 ## Backlog (decidido para depois, não bloqueia nada)
 - [ ] Migração de host se quem criou a sala sair
-- [ ] Servidor TURN para conexões que falham por NAT/firewall
+- [ ] Servidor TURN para conexões que falham por NAT/firewall (o signaling próprio resolve "se encontrar", mas não substitui TURN se a rede de alguém bloquear o WebRTC direto)
+- [ ] Hospedar `server/index.js` publicamente (hoje só funciona se todo mundo alcançar a máquina que roda ele — ok pra rede local, não pra amigos em redes diferentes)
 - [ ] Caminho para servidor real (Colyseus) se algum dia escalar além de "eu e meus amigos"

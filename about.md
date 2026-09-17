@@ -136,3 +136,9 @@ Bora. Separei em 3 linhas, dependendo do que você quer que o nome venda primeir
 - Sparkfall
 
 Se quiser eu posso filtrar por vibe (mais sério/dark vs mais colorido/fofo) ou gerar mais em cima de um desses que você curtir. Qual direção parece mais perto do que você imagina pro jogo?
+
+---
+
+Testando o multiplayer de verdade com o irmão dele, a escolha de P2P via Trystero/trackers públicos do WebTorrent (a recomendação original lá em cima) mostrou a cara feia: dos 4 trackers padrão, só 2 estavam de pé (`tracker.btorrent.xyz` e `tracker.files.fm` fora do ar, confirmado nos dois lados da conexão). Mesmo com os 2 que funcionavam abrindo socket normalmente, o pareamento entre os dois jogadores nunca completava — a conclusão, com pesquisa de fora confirmando, é que a infraestrutura pública de tracker WebTorret hoje é frágil demais (poucos servidores voluntários, sem SLA) pra depender dela num jogo real.
+
+Solução: trocado por um servidor de sinalização próprio (`server/index.js`, ~70 linhas com a lib `ws`) — ele só troca offer/answer/ICE entre os dois jogadores da mesma sala pra eles se encontrarem; o jogo em si continua 100% P2P direto por WebRTC depois disso, igual ao plano original. Testado localmente (dois navegadores automatizados) com handshake completo (`connected`). Continua exigindo rodar `npm run server` além do `npm run dev` — e continua só funcionando entre pessoas que alcancem essa máquina (rede local, por enquanto); hospedar esse servidor num lugar público é o próximo passo pra jogar com alguém fora de casa.
