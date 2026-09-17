@@ -18,6 +18,7 @@ export interface CharacterDef {
   id: string;
   name: string;
   color: string;
+  modelUrl: string;
   stats: CharacterStats;
   loadout: CharacterLoadout;
 }

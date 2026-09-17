@@ -123,6 +123,16 @@ export const ABILITIES = {
     effect: { kind: "slow", factor: 0.3, durationMs: 4000 },
     vfx: { color: "#c9f2ff", particle: "frost", sound: "windgust" },
   },
+  teleporte: {
+    id: "teleporte",
+    name: "Teleporte",
+    tier: "strong",
+    cost: 30,
+    cooldownMs: 9000,
+    target: { kind: "self" },
+    effect: { kind: "teleport", distance: 8 },
+    vfx: { color: "#c86bff", particle: "warp", sound: "blink" },
+  },
 } satisfies Record<string, Ability>;
 
 export type AbilityId = keyof typeof ABILITIES;

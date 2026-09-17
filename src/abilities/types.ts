@@ -11,7 +11,8 @@ export type AbilityEffect =
   | { kind: "heal"; amount: number }
   | { kind: "stun"; durationMs: number }
   | { kind: "slow"; factor: number; durationMs: number }
-  | { kind: "speedBuff"; factor: number; durationMs: number };
+  | { kind: "speedBuff"; factor: number; durationMs: number }
+  | { kind: "teleport"; distance: number };
 
 export interface AbilityVfx {
   color: string;

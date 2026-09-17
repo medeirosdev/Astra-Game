@@ -88,6 +88,10 @@ export class AbilityRuntime {
         this.speedFactor = effect.factor;
         this.speedFactorUntil = now + effect.durationMs;
         break;
+      case "teleport":
+        // Efeito posicional — quem aplica é o Engine (tem a posição do
+        // jogador), não a runtime (só sabe vida/energia/status).
+        break;
     }
   }
 

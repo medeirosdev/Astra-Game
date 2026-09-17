@@ -47,11 +47,12 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 ## Fase 6 — Conteúdo
 - [x] Tela de seleção de personagem (menu já deixa escolher entre Testador e Guardião antes de criar/entrar na sala)
 - [x] Segundo personagem de teste com loadout/estilo diferente (Guardião: tanque, cura/controle) e mais poderes na receita (`rajadaDeGelo`, `curaRapida`, `toqueEletrico`, `investidaFeroz`, `domoDeProtecao`, `meteoro`, `tempestadeDeGelo`)
+- [x] Nova habilidade "Teleporte" (self, desloca 8 unidades na direção que o personagem olha) — trocou o lugar de `passoRapido` no loadout forte do Testador (`passoRapido` continua na receita, só não é mais usado por ele)
 - [ ] Primeiro personagem de poder de anime de verdade (ex: baseado no Gojo Satoru)
 - [ ] Mais mapas/arenas
 
 ## Fase 7 — Polimento
-- [ ] Modelo/animação de personagem de verdade (hoje é uma cápsula colorida)
+- [x] Modelo/animação de personagem de verdade (hoje é uma cápsula colorida) — Testador e Guardião agora usam modelos reais (Kenney "Blocky Characters", CC0, ver `public/models/CREDITS.txt`), com idle/walk/sprint e uma animação de ataque/conjuração ao castar, local e pros peers remotos (`src/game/CharacterModel.ts`)
 - [ ] Variedade no chão voxel (hoje é um bloco só repetido)
 - [ ] Som (vfx.sound já existe nas receitas, falta tocar de verdade)
 - [ ] Menu/HUD com mais identidade visual

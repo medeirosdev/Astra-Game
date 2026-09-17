@@ -46,13 +46,14 @@ async function main() {
 
   sync.onHello(({ characterId: remoteCharacterId }, peerId) => {
     if (!isCharacterId(remoteCharacterId)) return;
-    engine.setRemotePlayerColor(peerId, CHARACTERS[remoteCharacterId].color);
+    engine.setRemotePlayerCharacter(peerId, CHARACTERS[remoteCharacterId].modelUrl);
   });
   sync.onPosition((transform, peerId) => engine.updateRemotePlayer(peerId, transform));
   sync.onCast(({ abilityId, x, y, z, yaw }, casterId) => {
     if (!isAbilityId(abilityId)) return;
     const ability = ABILITIES[abilityId];
     engine.castAbilityAt(ability, { x, y, z }, yaw);
+    engine.playRemoteAnimation(casterId, ability);
     resolveIncomingCast(ability, { x, y, z }, yaw, () => engine.getLocalTransform(), () => {
       const now = performance.now();
       const wasAlive = !engine.runtime.isDead(now);
@@ -86,7 +87,10 @@ async function main() {
     if (!cast) return;
     const ability = ABILITIES[slot.abilityId];
     engine.castAbility(ability);
-    if (ability.target.kind === "self") engine.runtime.applyEffect(ability.effect, now);
+    if (ability.target.kind === "self") {
+      if (ability.effect.kind === "teleport") engine.teleportForward(ability.effect.distance);
+      else engine.runtime.applyEffect(ability.effect, now);
+    }
     sync.sendCast({ abilityId: slot.abilityId, ...engine.getLocalTransform() });
   });
 

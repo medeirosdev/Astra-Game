@@ -7,10 +7,11 @@ export const CHARACTERS = {
     id: "testador",
     name: "Testador",
     color: "#4fa3ff",
+    modelUrl: "/models/character-j.glb",
     stats: { health: 100, energy: 100, energyRegenPerSec: 8, moveSpeed: 6 },
     loadout: {
       common: ["bolaDeEnergia", "golpeRapido"],
-      strong: ["ondaDeChoque", "passoRapido"],
+      strong: ["ondaDeChoque", "teleporte"],
       super: "explosaoDefinitiva",
     },
   },
@@ -18,6 +19,7 @@ export const CHARACTERS = {
     id: "guardiao",
     name: "Guardião",
     color: "#7dffb3",
+    modelUrl: "/models/character-l.glb",
     stats: { health: 140, energy: 90, energyRegenPerSec: 7, moveSpeed: 5 },
     loadout: {
       common: ["toqueEletrico", "curaRapida"],

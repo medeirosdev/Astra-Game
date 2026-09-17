@@ -6,6 +6,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import type { Ability } from "../abilities/types";
 import type { CharacterDef } from "../characters/types";
 import { AbilityRuntime } from "./AbilityRuntime";
+import { CharacterModel } from "./CharacterModel";
 
 const GRID_SIZE = 24;
 const BLOCK_SIZE = 1;
@@ -15,7 +16,8 @@ const CAMERA_HEIGHT = 2;
 const MIN_PITCH = -0.2;
 const MAX_PITCH = 1.3;
 const MOUSE_SENSITIVITY = 0.0025;
-const SPAWN_POINT = new THREE.Vector3(0, 1, 0);
+const SPAWN_POINT = new THREE.Vector3(0, 0, 0);
+const MOVING_THRESHOLD = 0.01;
 
 interface Projectile {
   mesh: THREE.Mesh;
@@ -24,7 +26,9 @@ interface Projectile {
 }
 
 interface RemotePlayer {
-  mesh: THREE.Mesh;
+  group: THREE.Group;
+  placeholder: THREE.Mesh | null;
+  model: CharacterModel | null;
   target: THREE.Vector3;
   yaw: number;
 }
@@ -36,12 +40,20 @@ export interface Transform {
   yaw: number;
 }
 
+// "instant" é corpo a corpo (soco/golpe); o resto (projétil, área, self) usa
+// a pose de "atirar/canalizar" — não tem uma animação dedicada de conjurar
+// magia nesse pacote, essa é a mais próxima disso.
+function attackAnimationFor(ability: Ability): string {
+  return ability.target.kind === "instant" ? "attack-melee-right" : "holding-right-shoot";
+}
+
 export class Engine {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
   private readonly composer: EffectComposer;
-  private readonly player: THREE.Mesh;
+  private readonly player: THREE.Group;
+  private readonly playerModel: CharacterModel;
   private readonly clock = new THREE.Clock();
   private readonly keys = new Set<string>();
   private readonly projectiles: Projectile[] = [];
@@ -75,16 +87,19 @@ export class Engine {
     this.setupLights();
     this.buildVoxelGround();
 
-    const playerGeo = new THREE.CapsuleGeometry(0.5, 1, 4, 8);
-    const playerMat = new THREE.MeshStandardMaterial({ color: character.color, roughness: 0.4, metalness: 0.1 });
-    this.player = new THREE.Mesh(playerGeo, playerMat);
-    this.player.position.set(0, 1, 0);
-    this.player.castShadow = true;
+    this.player = new THREE.Group();
+    this.player.position.copy(SPAWN_POINT);
     this.scene.add(this.player);
+    this.playerModel = new CharacterModel(character.modelUrl);
+    this.player.add(this.playerModel.group);
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.6, 0.4, 0.15);
+    // Threshold alto de propósito: só o VFX das habilidades (emissive forte) deve
+    // brilhar — os modelos dos personagens usam material unlit (KHR_materials_unlit,
+    // ver public/models/CREDITS.txt) com texturas claras, que com threshold baixo
+    // eram capturadas pelo bloom e ficavam com aparência estourada/lavada.
+    const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.6, 0.4, 0.75);
     this.composer.addPass(bloom);
     this.composer.addPass(new OutputPass());
 
@@ -175,6 +190,7 @@ export class Engine {
   private updateMovement(dt: number) {
     const now = performance.now();
     this.updateDeathState(now);
+    this.playerModel.update(dt);
 
     if (this.frozen || this.runtime.isDead(now)) {
       this.updateCamera();
@@ -183,6 +199,7 @@ export class Engine {
 
     this.player.rotation.y = this.yaw;
 
+    let moved = false;
     if (!this.runtime.isStunned(now)) {
       const forward = this.forward();
       const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(UP, this.yaw);
@@ -192,11 +209,15 @@ export class Engine {
       if (this.keys.has("a")) move.sub(right);
       if (this.keys.has("d")) move.add(right);
       if (move.lengthSq() > 0) {
-        const speed = this.moveSpeed * this.runtime.getSpeedFactor(now);
+        const speedFactor = this.runtime.getSpeedFactor(now);
+        const speed = this.moveSpeed * speedFactor;
         move.normalize().multiplyScalar(speed * dt);
         this.player.position.add(move);
+        this.playerModel.play(speedFactor > 1 ? "sprint" : "walk");
+        moved = true;
       }
     }
+    if (!moved) this.playerModel.play("idle");
 
     this.updateCamera();
   }
@@ -218,15 +239,38 @@ export class Engine {
     return { x: this.player.position.x, y: this.player.position.y, z: this.player.position.z, yaw: this.yaw };
   }
 
+  teleportForward(distance: number) {
+    this.player.position.addScaledVector(this.forward(), distance);
+  }
+
   spawnRemotePlayer(peerId: string, color: string) {
     if (this.remotePlayers.has(peerId)) return;
+    const group = new THREE.Group();
+    group.position.copy(SPAWN_POINT);
+    this.scene.add(group);
+
+    // Cápsula genérica até o "hello" chegar dizendo qual personagem/modelo usar.
     const geo = new THREE.CapsuleGeometry(0.5, 1, 4, 8);
     const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.1 });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(0, 1, 0);
-    mesh.castShadow = true;
-    this.scene.add(mesh);
-    this.remotePlayers.set(peerId, { mesh, target: mesh.position.clone(), yaw: 0 });
+    const placeholder = new THREE.Mesh(geo, mat);
+    placeholder.position.y = 1;
+    placeholder.castShadow = true;
+    group.add(placeholder);
+
+    this.remotePlayers.set(peerId, { group, placeholder, model: null, target: group.position.clone(), yaw: 0 });
+  }
+
+  setRemotePlayerCharacter(peerId: string, modelUrl: string) {
+    const remote = this.remotePlayers.get(peerId);
+    if (!remote || remote.model) return;
+    if (remote.placeholder) {
+      remote.group.remove(remote.placeholder);
+      remote.placeholder.geometry.dispose();
+      (remote.placeholder.material as THREE.Material).dispose();
+      remote.placeholder = null;
+    }
+    remote.model = new CharacterModel(modelUrl);
+    remote.group.add(remote.model.group);
   }
 
   updateRemotePlayer(peerId: string, transform: Transform & { alive: boolean }) {
@@ -234,33 +278,39 @@ export class Engine {
     if (!remote) return;
     remote.target.set(transform.x, transform.y, transform.z);
     remote.yaw = transform.yaw;
-    remote.mesh.visible = transform.alive;
+    remote.group.visible = transform.alive;
   }
 
-  setRemotePlayerColor(peerId: string, color: string) {
-    const remote = this.remotePlayers.get(peerId);
-    if (!remote) return;
-    (remote.mesh.material as THREE.MeshStandardMaterial).color.set(color);
+  playRemoteAnimation(peerId: string, ability: Ability) {
+    this.remotePlayers.get(peerId)?.model?.playOnce(attackAnimationFor(ability), "idle");
   }
 
   removeRemotePlayer(peerId: string) {
     const remote = this.remotePlayers.get(peerId);
     if (!remote) return;
-    this.scene.remove(remote.mesh);
-    remote.mesh.geometry.dispose();
-    (remote.mesh.material as THREE.Material).dispose();
+    this.scene.remove(remote.group);
+    if (remote.placeholder) {
+      remote.placeholder.geometry.dispose();
+      (remote.placeholder.material as THREE.Material).dispose();
+    }
+    remote.model?.dispose();
     this.remotePlayers.delete(peerId);
   }
 
-  private updateRemotePlayers() {
+  private updateRemotePlayers(dt: number) {
     for (const remote of this.remotePlayers.values()) {
-      remote.mesh.position.lerp(remote.target, 0.25);
-      remote.mesh.rotation.y = remote.yaw;
+      const before = remote.group.position.clone();
+      remote.group.position.lerp(remote.target, 0.25);
+      remote.group.rotation.y = remote.yaw;
+      remote.model?.update(dt);
+      const moved = remote.group.position.distanceTo(before) > MOVING_THRESHOLD;
+      remote.model?.play(moved ? "walk" : "idle");
     }
   }
 
   castAbility(ability: Ability) {
     this.castAbilityAt(ability, this.player.position, this.yaw);
+    this.playerModel.playOnce(attackAnimationFor(ability), "idle");
   }
 
   castAbilityAt(ability: Ability, origin: { x: number; y: number; z: number }, yaw = 0) {
@@ -312,7 +362,7 @@ export class Engine {
       this.runtime.update(dt);
       this.updateMovement(dt);
       this.updateProjectiles(dt);
-      this.updateRemotePlayers();
+      this.updateRemotePlayers(dt);
       this.onHudUpdate(this.runtime);
       this.composer.render();
       requestAnimationFrame(loop);
