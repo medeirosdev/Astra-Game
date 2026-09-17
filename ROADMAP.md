@@ -43,7 +43,8 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 - [ ] Tela de fim de partida com resultado
 
 ## Fase 6 — Conteúdo
-- [ ] Tela de seleção de personagem (hoje é só 1 personagem fixo: "Testador")
+- [x] Tela de seleção de personagem (menu já deixa escolher entre Testador e Guardião antes de criar/entrar na sala)
+- [x] Segundo personagem de teste com loadout/estilo diferente (Guardião: tanque, cura/controle) e mais poderes na receita (`rajadaDeGelo`, `curaRapida`, `toqueEletrico`, `investidaFeroz`, `domoDeProtecao`, `meteoro`, `tempestadeDeGelo`)
 - [ ] Primeiro personagem de poder de anime de verdade (ex: baseado no Gojo Satoru)
 - [ ] Mais mapas/arenas
 
