@@ -15,6 +15,7 @@ const CAMERA_HEIGHT = 2;
 const MIN_PITCH = -0.2;
 const MAX_PITCH = 1.3;
 const MOUSE_SENSITIVITY = 0.0025;
+const SPAWN_POINT = new THREE.Vector3(0, 1, 0);
 
 interface Projectile {
   mesh: THREE.Mesh;
@@ -48,6 +49,7 @@ export class Engine {
   private readonly moveSpeed: number;
   private yaw = 0;
   private pitch = 0.5;
+  private frozen = false;
   readonly runtime: AbilityRuntime;
 
   private readonly onHudUpdate: (runtime: AbilityRuntime) => void;
@@ -159,10 +161,28 @@ export class Engine {
     return new THREE.Vector3(0, 0, -1).applyAxisAngle(UP, this.yaw);
   }
 
+  setFrozen(frozen: boolean) {
+    this.frozen = frozen;
+  }
+
+  private updateDeathState(now: number) {
+    this.player.visible = !this.runtime.isDead(now);
+    if (this.runtime.respawnIfReady(now)) {
+      this.player.position.copy(SPAWN_POINT);
+    }
+  }
+
   private updateMovement(dt: number) {
+    const now = performance.now();
+    this.updateDeathState(now);
+
+    if (this.frozen || this.runtime.isDead(now)) {
+      this.updateCamera();
+      return;
+    }
+
     this.player.rotation.y = this.yaw;
 
-    const now = performance.now();
     if (!this.runtime.isStunned(now)) {
       const forward = this.forward();
       const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(UP, this.yaw);
@@ -209,11 +229,12 @@ export class Engine {
     this.remotePlayers.set(peerId, { mesh, target: mesh.position.clone(), yaw: 0 });
   }
 
-  updateRemotePlayer(peerId: string, transform: Transform) {
+  updateRemotePlayer(peerId: string, transform: Transform & { alive: boolean }) {
     const remote = this.remotePlayers.get(peerId);
     if (!remote) return;
     remote.target.set(transform.x, transform.y, transform.z);
     remote.yaw = transform.yaw;
+    remote.mesh.visible = transform.alive;
   }
 
   setRemotePlayerColor(peerId: string, color: string) {

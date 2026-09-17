@@ -5,6 +5,7 @@ export interface PositionPayload {
   y: number;
   z: number;
   yaw: number;
+  alive: boolean;
 }
 
 export interface CastPayload {
@@ -19,6 +20,16 @@ export interface HelloPayload {
   characterId: string;
 }
 
+// Vazio de propósito — quem manda importa mais que o conteúdo. Ver
+// src/main.ts: mandado pro peer que me matou, pra ele creditar o abate.
+export interface KillCreditPayload {
+  ack: true;
+}
+
+export interface ScorePayload {
+  kills: number;
+}
+
 // Cor neutra usada até o "hello" do peer chegar dizendo qual personagem ele escolheu.
 export const PLACEHOLDER_COLOR = "#888888";
 
@@ -29,5 +40,18 @@ export function setupSync(room: GameRoom) {
   const [sendPosition, onPosition] = room.makeAction<PositionPayload>("pos");
   const [sendCast, onCast] = room.makeAction<CastPayload>("cast");
   const [sendHello, onHello] = room.makeAction<HelloPayload>("hello");
-  return { sendPosition, onPosition, sendCast, onCast, sendHello, onHello };
+  const [sendKillCredit, onKillCredit] = room.makeAction<KillCreditPayload>("kill");
+  const [sendScore, onScore] = room.makeAction<ScorePayload>("score");
+  return {
+    sendPosition,
+    onPosition,
+    sendCast,
+    onCast,
+    sendHello,
+    onHello,
+    sendKillCredit,
+    onKillCredit,
+    sendScore,
+    onScore,
+  };
 }

@@ -202,3 +202,74 @@ body {
   font-size: 12px;
   opacity: 0.7;
 }
+
+.match-timer {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 10, 18, 0.6);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.scoreboard {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.scoreboard-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(10, 10, 18, 0.5);
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.death-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 600;
+  color: #ff5c5c;
+  text-shadow: 0 0 12px rgba(255, 92, 92, 0.6);
+  background: rgba(10, 10, 18, 0.35);
+}
+
+.end-screen {
+  display: none;
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(10, 10, 18, 0.85);
+  z-index: 6;
+}
+
+.end-screen h2 {
+  font-size: 32px;
+  letter-spacing: 3px;
+  margin: 0;
+  color: #4fa3ff;
+}
+
+.end-screen p {
+  font-size: 18px;
+  margin: 0;
+}

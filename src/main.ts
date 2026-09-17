@@ -7,8 +7,10 @@ import { setupSync, PLACEHOLDER_COLOR } from "./network/sync";
 import { CHARACTERS, isCharacterId } from "./characters/characters";
 import { ABILITIES, isAbilityId } from "./abilities/abilities";
 import { resolveIncomingCast } from "./game/combat";
+import { MatchState, LOCAL_SCORE_KEY } from "./game/match";
 
 const POSITION_SYNC_HZ = 15;
+const MATCH_DURATION_MS = Number(new URLSearchParams(location.search).get("matchSeconds") ?? 180) * 1000;
 
 async function main() {
   const app = document.getElementById("app")!;
@@ -20,8 +22,14 @@ async function main() {
   const character = CHARACTERS[characterId];
   console.log(`[astra] entrando na sala "${code}" como ${character.name}`);
 
+  const match = new MatchState(MATCH_DURATION_MS, performance.now());
   const hud = new Hud(app, character);
-  const engine = new Engine(app, character, (runtime) => hud.update(runtime, performance.now()));
+  const engine = new Engine(app, character, (runtime) => {
+    const now = performance.now();
+    hud.update(runtime, now);
+    hud.updateMatch(match, now);
+    engine.setFrozen(match.isOver(now));
+  });
 
   let peerCount = 0;
   room.onPeerJoin((peerId) => {
@@ -41,16 +49,24 @@ async function main() {
     engine.setRemotePlayerColor(peerId, CHARACTERS[remoteCharacterId].color);
   });
   sync.onPosition((transform, peerId) => engine.updateRemotePlayer(peerId, transform));
-  sync.onCast(({ abilityId, x, y, z, yaw }) => {
+  sync.onCast(({ abilityId, x, y, z, yaw }, casterId) => {
     if (!isAbilityId(abilityId)) return;
     const ability = ABILITIES[abilityId];
     engine.castAbilityAt(ability, { x, y, z }, yaw);
-    resolveIncomingCast(ability, { x, y, z }, yaw, () => engine.getLocalTransform(), () =>
-      engine.runtime.applyEffect(ability.effect, performance.now()),
-    );
+    resolveIncomingCast(ability, { x, y, z }, yaw, () => engine.getLocalTransform(), () => {
+      const now = performance.now();
+      const wasAlive = !engine.runtime.isDead(now);
+      engine.runtime.applyEffect(ability.effect, now);
+      if (wasAlive && engine.runtime.isDead(now)) sync.sendKillCredit({ ack: true }, casterId);
+    });
   });
+  sync.onKillCredit(() => {
+    match.registerLocalKill();
+    sync.sendScore({ kills: match.getKills(LOCAL_SCORE_KEY) });
+  });
+  sync.onScore(({ kills }, peerId) => match.setKills(peerId, kills));
 
-  setInterval(() => sync.sendPosition(engine.getLocalTransform()), 1000 / POSITION_SYNC_HZ);
+  setInterval(() => sync.sendPosition({ ...engine.getLocalTransform(), alive: !engine.runtime.isDead(performance.now()) }), 1000 / POSITION_SYNC_HZ);
 
   // Diagnóstico: RTCPeerConnection pode existir (sinalização encontrou o outro
   // peer) mesmo sem nunca conectar de fato (ICE falhou — ex: rede bloqueando
@@ -63,7 +79,7 @@ async function main() {
 
   window.addEventListener("keydown", (e) => {
     const now = performance.now();
-    if (engine.runtime.isStunned(now)) return;
+    if (match.isOver(now) || engine.runtime.isDead(now) || engine.runtime.isStunned(now)) return;
     const slot = engine.runtime.slots.find((s) => s.key === e.key);
     if (!slot) return;
     const cast = engine.runtime.tryCast(slot.abilityId, now);

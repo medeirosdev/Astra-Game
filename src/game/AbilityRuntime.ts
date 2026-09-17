@@ -6,6 +6,8 @@ export interface CastResult {
   ability: Ability;
 }
 
+const RESPAWN_DELAY_MS = 3000;
+
 // Controla vida, energia, cooldown e status (stun/slow/buff) de um
 // personagem em jogo. Regra de acerto (ver about.md e ROADMAP.md, Fase 3):
 // quem decide se FOI atingido é sempre o alvo, não quem atacou — cada
@@ -24,6 +26,7 @@ export class AbilityRuntime {
   private stunnedUntil = 0;
   private speedFactor = 1;
   private speedFactorUntil = 0;
+  private deadUntil = 0;
 
   constructor(private readonly character: CharacterDef) {
     this.health = character.stats.health;
@@ -68,9 +71,11 @@ export class AbilityRuntime {
   }
 
   applyEffect(effect: AbilityEffect, now: number) {
+    if (this.isDead(now)) return;
     switch (effect.kind) {
       case "damage":
         this.health = Math.max(0, this.health - effect.amount);
+        if (this.health === 0) this.deadUntil = now + RESPAWN_DELAY_MS;
         break;
       case "heal":
         this.health = Math.min(this.maxHealth, this.health + effect.amount);
@@ -92,5 +97,25 @@ export class AbilityRuntime {
 
   getSpeedFactor(now: number): number {
     return now < this.speedFactorUntil ? this.speedFactor : 1;
+  }
+
+  isDead(now: number): boolean {
+    return now < this.deadUntil;
+  }
+
+  respawnCountdownMs(now: number): number {
+    return Math.max(0, this.deadUntil - now);
+  }
+
+  // Chamar todo frame; retorna true só no frame exato em que o respawn
+  // acontece, pra quem chama saber a hora de teleportar de volta ao spawn.
+  respawnIfReady(now: number): boolean {
+    if (this.deadUntil === 0 || now < this.deadUntil) return false;
+    this.health = this.maxHealth;
+    this.energy = this.maxEnergy;
+    this.deadUntil = 0;
+    this.stunnedUntil = 0;
+    this.speedFactorUntil = 0;
+    return true;
   }
 }

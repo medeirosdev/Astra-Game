@@ -32,7 +32,7 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 ## Fase 3 — Combate de verdade
 - [x] Sistema de alvo/hitbox: instant/area checam distância até o alvo; projétil simula a trajetória e checa o segmento percorrido a cada tick (evita "atravessar" o alvo entre checagens — bug real encontrado e corrigido num teste automatizado)
 - [x] Aplicar o `effect` da habilidade no alvo (dano, cura, stun, slow, speedBuff) — `AbilityRuntime.applyEffect`, verificado ponta a ponta (dois navegadores reais, vida caindo de 100% pra 88%/75% conforme a habilidade)
-- [ ] Morte/respawn de jogador (hoje a vida vai a 0 e para; não acontece nada especial)
+- [x] Morte/respawn de jogador: vida a 0 trava input/movimento, esconde o personagem, e respawna sozinho depois de 3s no ponto de spawn com vida/energia cheias — verificado ponta a ponta (dois navegadores, snapshot síncrono confirmando overlay + contagem regressiva)
 
 ## Fase 4 — Modo Sobrevivência
 - [ ] Spawn de mobs em ondas
@@ -40,9 +40,9 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 - [ ] Estado de partida: lobby → partida → fim (vitória/derrota)
 
 ## Fase 5 — Modo Mata-mata (arena)
-- [ ] Mapa fixo, respawn ao morrer
-- [ ] Placar por abates, partida com timer
-- [ ] Tela de fim de partida com resultado
+- [x] Mapa fixo, respawn ao morrer (reusa o respawn da Fase 3; mapa é o mesmo por enquanto — mapas dedicados ficam pra Fase 6)
+- [x] Placar por abates, partida com timer — quem mata credita o abate via rede (`sync.ts`, ações `kill`/`score`), timer configurável (`?matchSeconds=`, 3min por padrão)
+- [x] Tela de fim de partida com resultado (vencedor/empate) — congela movimento e cast quando acaba; verificado ponta a ponta com partida de 3s
 
 ## Fase 6 — Conteúdo
 - [x] Tela de seleção de personagem (menu já deixa escolher entre Testador e Guardião antes de criar/entrar na sala)
