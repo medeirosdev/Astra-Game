@@ -1,0 +1,7 @@
+whoosh.ogg, zap.ogg, hum.ogg, dash.ogg, blink.ogg, chime.ogg
+From Kenney's "Digital Audio" pack (kenney.nl/assets/digital-audio).
+
+hit.ogg, chill.ogg, windgust.ogg, boom.ogg, obstacleBreak.ogg
+From Kenney's "Impact Sounds" pack (kenney.nl/assets/impact-sounds).
+
+License: CC0 (public domain) — no attribution required, credited here anyway.

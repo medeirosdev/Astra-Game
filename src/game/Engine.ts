@@ -7,6 +7,8 @@ import type { Ability } from "../abilities/types";
 import type { CharacterDef } from "../characters/types";
 import { AbilityRuntime } from "./AbilityRuntime";
 import { CharacterModel } from "./CharacterModel";
+import { pickMapPreset, type MapPreset } from "./mapPresets";
+import { playSound } from "./sound";
 
 const GRID_SIZE = 240; // 10x o tamanho original (24), a pedido
 const BLOCK_SIZE = 1;
@@ -38,6 +40,7 @@ interface Projectile {
 interface Obstacle {
   mesh: THREE.Mesh;
   material: THREE.MeshStandardMaterial;
+  baseColor: THREE.Color;
   position: THREE.Vector3;
   radius: number;
   health: number;
@@ -87,11 +90,13 @@ export class Engine {
   readonly runtime: AbilityRuntime;
 
   private readonly onHudUpdate: (runtime: AbilityRuntime) => void;
+  private readonly map: MapPreset;
 
-  constructor(container: HTMLElement, character: CharacterDef, onHudUpdate: (runtime: AbilityRuntime) => void) {
+  constructor(container: HTMLElement, character: CharacterDef, roomCode: string, onHudUpdate: (runtime: AbilityRuntime) => void) {
     this.onHudUpdate = onHudUpdate;
     this.runtime = new AbilityRuntime(character);
     this.moveSpeed = character.stats.moveSpeed;
+    this.map = pickMapPreset(roomCode);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -100,8 +105,8 @@ export class Engine {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
 
-    this.scene.background = new THREE.Color(0x0a0a12);
-    this.scene.fog = new THREE.Fog(0x0a0a12, 40, 220);
+    this.scene.background = new THREE.Color(this.map.backgroundColor);
+    this.scene.fog = new THREE.Fog(this.map.backgroundColor, 40, 220);
 
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 300);
     this.camera.position.set(0, 8, 12);
@@ -196,8 +201,8 @@ export class Engine {
     mesh.castShadow = false;
     mesh.receiveShadow = true;
 
-    const colorA = new THREE.Color(0x2b3a55);
-    const colorB = new THREE.Color(0x24314a);
+    const colorA = new THREE.Color(this.map.groundColorA);
+    const colorB = new THREE.Color(this.map.groundColorB);
     const dummy = new THREE.Object3D();
     let i = 0;
     for (let xi = 0; xi < tilesPerSide; xi++) {
@@ -219,7 +224,7 @@ export class Engine {
   // updateMovement/clampToArena), então na prática ninguém atravessa.
   private buildWalls() {
     const geo = new THREE.BoxGeometry(BLOCK_SIZE, WALL_HEIGHT, BLOCK_SIZE);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x1b2338, roughness: 0.9 });
+    const mat = new THREE.MeshStandardMaterial({ color: this.map.wallColor, roughness: 0.9 });
     const half = GRID_SIZE / 2;
     const mesh = new THREE.InstancedMesh(geo, mat, GRID_SIZE * 4);
     mesh.castShadow = true;
@@ -262,7 +267,7 @@ export class Engine {
       const height = 1 + Math.random() * 3;
       const size = 1.4 + Math.random() * 1.2;
       const geo = new THREE.BoxGeometry(size, height, size);
-      const material = new THREE.MeshStandardMaterial({ color: 0x4a3728, roughness: 0.8 });
+      const material = new THREE.MeshStandardMaterial({ color: this.map.obstacleColor, roughness: 0.8 });
       const mesh = new THREE.Mesh(geo, material);
       mesh.position.set(x, height / 2, z);
       mesh.castShadow = true;
@@ -273,6 +278,7 @@ export class Engine {
       this.obstacles.push({
         mesh,
         material,
+        baseColor: material.color.clone(),
         position: mesh.position.clone(),
         radius: size * 0.75,
         health: maxHealth,
@@ -296,10 +302,11 @@ export class Engine {
       this.scene.remove(obstacle.mesh);
       obstacle.mesh.geometry.dispose();
       obstacle.material.dispose();
+      playSound("obstacleBreak");
       return;
     }
     const t = obstacle.health / obstacle.maxHealth;
-    obstacle.material.color.setRGB(0.29 * t + 0.03, 0.22 * t + 0.02, 0.16 * t + 0.02);
+    obstacle.material.color.copy(obstacle.baseColor).multiplyScalar(0.25 + 0.75 * t);
   }
 
   // Instant/área resolvem contra obstáculos na hora do cast (mesma lógica de
@@ -469,6 +476,7 @@ export class Engine {
 
   castAbilityAt(ability: Ability, origin: { x: number; y: number; z: number }, yaw = 0) {
     const originVec = new THREE.Vector3(origin.x, origin.y, origin.z);
+    playSound(ability.vfx.sound);
     if (ability.target.kind === "projectile") {
       const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(UP, yaw);
       const geo = new THREE.SphereGeometry(0.25, 12, 12);

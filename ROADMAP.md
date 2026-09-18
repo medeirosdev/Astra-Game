@@ -48,15 +48,15 @@ Passo a passo do projeto, do brainstorm (`about.md`) até um jogo jogável. Marc
 - [x] Tela de seleção de personagem (menu já deixa escolher entre Testador e Guardião antes de criar/entrar na sala)
 - [x] Segundo personagem de teste com loadout/estilo diferente (Guardião: tanque, cura/controle) e mais poderes na receita (`rajadaDeGelo`, `curaRapida`, `toqueEletrico`, `investidaFeroz`, `domoDeProtecao`, `meteoro`, `tempestadeDeGelo`)
 - [x] Nova habilidade "Teleporte" (self, desloca 8 unidades na direção que o personagem olha) — trocou o lugar de `passoRapido` no loadout forte do Testador (`passoRapido` continua na receita, só não é mais usado por ele)
-- [ ] Primeiro personagem de poder de anime de verdade (ex: baseado no Gojo Satoru)
-- [ ] Mais mapas/arenas
+- [x] Primeiro personagem de poder de anime de verdade — **Sensei**, inspirado no Gojo Satoru (não usa o nome pra evitar colar direto na marca): vida baixa, energia alta, kit de mobilidade/explosão (`toqueVazio`, `infinito`, `efluvioRoxo`, `piscar`, `dominioVazio` — "Domínio: Vazio Infinito" como super). Modelo novo (character-q da Kenney, terno preto) — por coincidência a textura tem os olhos bem claros/brilhantes, que com o bloom lembra os "Seis Olhos" do personagem original sem ter sido planejado
+- [x] Mais mapas/arenas — 3 temas (`src/game/mapPresets.ts`: Abismo Noturno, Deserto Crestado, Gelo Eterno) escolhidos deterministicamente a partir do código da sala, então os dois peers sempre caem no mesmo mapa sem precisar trocar mensagem pra combinar
 
 ## Fase 7 — Polimento
 - [x] Modelo/animação de personagem de verdade (hoje é uma cápsula colorida) — Testador e Guardião agora usam modelos reais (Kenney "Blocky Characters", CC0, ver `public/models/CREDITS.txt`), com idle/walk/sprint e uma animação de ataque/conjuração ao castar, local e pros peers remotos (`src/game/CharacterModel.ts`)
 - [x] Mapa 10x maior (240x240, era 24x24), com muro no perímetro, chão em xadrez e ~140 obstáculos espalhados — e **cenário destrutível**: golpes/poderes com efeito de dano quebram obstáculos de verdade (vida própria por objeto, mesma lógica "cada peer resolve o próprio cast" do combate contra jogadores, sem precisar de mensagem de rede extra). Achei e corrigi uma regressão de performance real nesse processo: o chão em blocos de 1 unidade virou 57600 instâncias projetando sombra nelas mesmas (sem sentido, chão não precisa disso) — trocado por blocos de 3 unidades sem `castShadow`, e o sol passou a acompanhar o jogador em vez de um frustum de sombra fixo (não dava mais pra cobrir o mapa inteiro sem perder resolução)
 - [x] Variedade no chão voxel — xadrez de duas cores (feito junto com o mapa maior acima)
-- [ ] Som (vfx.sound já existe nas receitas, falta tocar de verdade)
-- [ ] Menu/HUD com mais identidade visual
+- [x] Som — efeitos reais tocando (Kenney "Digital Audio" + "Impact Sounds", CC0, ver `public/audio/CREDITS.txt`): cada `vfx.sound` das receitas mapeado pra um arquivo de verdade (`src/game/sound.ts`), toca em todo cast (local e remoto) e ao destruir um obstáculo — verificado que o som dispara de fato (não só que o código não quebra)
+- [x] Menu/HUD com mais identidade visual — fonte Rajdhani, logo "ASTRA" com glow pulsante, campo de estrelas animado no menu (o jogo se chama Astra, afinal), HUD com brilho por habilidade usando a cor do próprio `vfx.color` dela (além da cor por tier que já existia)
 
 ## Backlog (decidido para depois, não bloqueia nada)
 - [ ] Migração de host se quem criou a sala sair

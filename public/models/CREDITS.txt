@@ -1,4 +1,4 @@
-character-j.glb, character-l.glb, Textures/texture-j.png, Textures/texture-l.png
+character-j.glb, character-l.glb, character-q.glb, Textures/texture-j.png, Textures/texture-l.png, Textures/texture-q.png
 
 From Kenney's "Blocky Characters" pack (kenney.nl/assets/blocky-characters).
 License: CC0 (public domain) — no attribution required, credited here anyway.

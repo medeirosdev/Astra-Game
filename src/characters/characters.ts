@@ -3,6 +3,20 @@ import type { CharacterDef } from "./types";
 // Personagens de teste — validam o loadout de 5 poderes e dão variedade
 // de jogo antes de desenhar qualquer personagem de anime de verdade.
 export const CHARACTERS = {
+  sensei: {
+    id: "sensei",
+    name: "Sensei",
+    color: "#7b5cff",
+    modelUrl: "/models/character-q.glb",
+    // Inspirado no Gojo Satoru (ver about.md/ROADMAP.md) — vida mais baixa,
+    // energia alta, muita mobilidade e dano de explosão em vez de tanque.
+    stats: { health: 90, energy: 120, energyRegenPerSec: 9, moveSpeed: 6.5 },
+    loadout: {
+      common: ["toqueVazio", "infinito"],
+      strong: ["efluvioRoxo", "piscar"],
+      super: "dominioVazio",
+    },
+  },
   testador: {
     id: "testador",
     name: "Testador",

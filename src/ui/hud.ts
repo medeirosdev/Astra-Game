@@ -55,6 +55,7 @@ export class Hud {
       const ability = ABILITIES[abilityId];
       const slotEl = document.createElement("div");
       slotEl.className = `hud-slot tier-${ability.tier}`;
+      slotEl.style.setProperty("--accent", ability.vfx.color);
 
       const keyEl = document.createElement("span");
       keyEl.className = "key";

@@ -24,7 +24,7 @@ async function main() {
 
   const match = new MatchState(MATCH_DURATION_MS, performance.now());
   const hud = new Hud(app, character);
-  const engine = new Engine(app, character, (runtime) => {
+  const engine = new Engine(app, character, code, (runtime) => {
     const now = performance.now();
     hud.update(runtime, now);
     hud.updateMatch(match, now);

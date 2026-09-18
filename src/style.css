@@ -1,7 +1,7 @@
 * { box-sizing: border-box; }
 
 body {
-  font-family: "Segoe UI", system-ui, sans-serif;
+  font-family: "Rajdhani", "Segoe UI", system-ui, sans-serif;
   color: #eef2ff;
 }
 
@@ -25,10 +25,47 @@ body {
   align-items: center;
   justify-content: center;
   background: radial-gradient(circle at center, #16182a 0%, #0a0a12 100%);
+  overflow: hidden;
   z-index: 10;
 }
 
+/* Campo de estrelas — o nome do jogo é Astra, então o menu devia parecer um céu. */
+.menu::before,
+.menu::after {
+  content: "";
+  position: absolute;
+  inset: -10%;
+  background-repeat: repeat;
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, #fff 100%, transparent),
+    radial-gradient(1px 1px at 80% 10%, #fff 100%, transparent),
+    radial-gradient(1.5px 1.5px at 50% 60%, #fff 100%, transparent),
+    radial-gradient(1px 1px at 30% 80%, #fff 100%, transparent),
+    radial-gradient(1px 1px at 90% 70%, #fff 100%, transparent),
+    radial-gradient(1.5px 1.5px at 65% 35%, #fff 100%, transparent),
+    radial-gradient(1px 1px at 15% 55%, #fff 100%, transparent),
+    radial-gradient(1px 1px at 45% 15%, #fff 100%, transparent);
+  background-size: 300px 300px;
+  opacity: 0.35;
+  animation: twinkle 6s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.menu::after {
+  background-size: 220px 220px;
+  background-position: 60px 40px;
+  opacity: 0.2;
+  animation-duration: 4s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes twinkle {
+  from { opacity: 0.15; }
+  to { opacity: 0.5; }
+}
+
 .menu-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -38,11 +75,18 @@ body {
 }
 
 .menu-card h1 {
-  font-size: 42px;
-  letter-spacing: 6px;
+  font-size: 46px;
+  font-weight: 700;
+  letter-spacing: 8px;
   margin: 0 0 20px;
   color: #4fa3ff;
   text-shadow: 0 0 20px rgba(79, 163, 255, 0.6);
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { text-shadow: 0 0 20px rgba(79, 163, 255, 0.6); }
+  50% { text-shadow: 0 0 32px rgba(79, 163, 255, 0.9); }
 }
 
 .menu-card button {
@@ -169,7 +213,11 @@ body {
   opacity: 0.5;
 }
 
-.hud-slot.ready { opacity: 1; border-color: #4fa3ff; }
+.hud-slot.ready {
+  opacity: 1;
+  border-color: #4fa3ff;
+  box-shadow: 0 0 10px 1px var(--accent, transparent);
+}
 .hud-slot.tier-strong.ready { border-color: #ffb347; }
 .hud-slot.tier-super.ready { border-color: #ff3b3b; }
 
