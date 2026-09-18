@@ -18,8 +18,26 @@ const ANIMATION_LIBRARY_URLS = ["/models/anim-library-1.glb", "/models/anim-libr
 const TINTABLE_MATERIAL_PREFIX = "MI_Superhero_";
 
 const loader = new GLTFLoader();
+const textureLoader = new THREE.TextureLoader();
+const textureCache = new Map<string, Promise<THREE.Texture>>();
 const templateCache = new Map<string, Promise<CharacterTemplate>>();
 let animationLibraryPromise: Promise<Map<string, THREE.AnimationClip>> | null = null;
+
+// Variante de textura de pele (ver public/models/CREDITS.txt — "Light"/"Dark"
+// do pack Quaternius) pra dar alguma diferença real de skin entre
+// personagens que reaproveitam o mesmo corpo base, além do tint de cor.
+function loadSkinTexture(url: string): Promise<THREE.Texture> {
+  let cached = textureCache.get(url);
+  if (!cached) {
+    cached = textureLoader.loadAsync(url).then((tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.flipY = false; // convenção glTF, diferente do padrão do TextureLoader
+      return tex;
+    });
+    textureCache.set(url, cached);
+  }
+  return cached;
+}
 
 function loadCharacterTemplate(url: string): Promise<CharacterTemplate> {
   let cached = templateCache.get(url);
@@ -61,8 +79,12 @@ export class CharacterModel {
   // deixar o personagem semi-transparente durante invisibilidade.
   private meshMaterials: THREE.Material[] = [];
 
-  constructor(modelUrl: string, tintColor?: string) {
-    Promise.all([loadCharacterTemplate(modelUrl), loadAnimationLibrary()]).then(([{ scene }, clips]) => {
+  constructor(modelUrl: string, tintColor?: string, skinTextureUrl?: string) {
+    Promise.all([
+      loadCharacterTemplate(modelUrl),
+      loadAnimationLibrary(),
+      skinTextureUrl ? loadSkinTexture(skinTextureUrl) : Promise.resolve(null),
+    ]).then(([{ scene }, clips, skinTexture]) => {
       const instance = cloneSkeleton(scene) as THREE.Group;
       // Esse rig (Quaternius) também olha pra +Z por padrão; o resto do
       // jogo (câmera, movimento, mira dos poderes) trata -Z como "pra
@@ -78,8 +100,13 @@ export class CharacterModel {
         // ou deixar transparente um personagem vazaria pra todos os outros.
         if (obj.material instanceof THREE.MeshStandardMaterial) {
           obj.material = obj.material.clone();
-          if (tintColor && obj.material.name.startsWith(TINTABLE_MATERIAL_PREFIX)) {
-            obj.material.color.set(tintColor);
+          if (obj.material.name.startsWith(TINTABLE_MATERIAL_PREFIX)) {
+            if (skinTexture) obj.material.map = skinTexture;
+            // Tint mais fraco (mistura com branco) em vez de substituir a cor
+            // direto: sobrescrever deixa a pele/roupa uma estátua lisa de cor
+            // sólida, apagando o relevo da textura real. Misturado, dá pra
+            // reconhecer o personagem pela cor sem perder o corpo texturizado.
+            if (tintColor) obj.material.color.set(tintColor).lerp(new THREE.Color("#ffffff"), 0.55);
           }
           this.meshMaterials.push(obj.material);
         }

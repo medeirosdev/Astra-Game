@@ -28,6 +28,10 @@ export interface CharacterDef {
   name: string;
   color: string;
   modelUrl: string;
+  // Variante de textura de pele (ver public/models/CREDITS.txt) — dois
+  // personagens do mesmo corpo base (macho/fêmea) usam texturas diferentes
+  // pra não parecerem clones um do outro, além do tint de cor.
+  skinTextureUrl?: string;
   tagline: string;
   icon: CharacterIcon;
   stats: CharacterStats;
