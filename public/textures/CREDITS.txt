@@ -1,0 +1,12 @@
+abyss_*.jpg   — "Dark Rock" (Poly Haven)
+desert_*.jpg  — "Sandstone Cracks" (Poly Haven)
+ice_*.jpg     — "Snow 02" (Poly Haven)
+rock_*.jpg    — "Rock Boulder Dry" (Poly Haven), usado nas paredes/obstáculos dos 3 mapas
+
+Source: https://polyhaven.com — License: CC0 1.0 Universal (public domain,
+no attribution required, credited here anyway).
+
+Cada set tem 3 mapas (diff/nor/rough), baixados em 1k via a API pública da
+Poly Haven (api.polyhaven.com) e usados como textura PBR tileável (ver
+src/game/textures.ts) no lugar da cor sólida por bloco que o chão/paredes/
+obstáculos usavam antes.

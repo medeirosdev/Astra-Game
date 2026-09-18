@@ -8,6 +8,7 @@ import type { CharacterDef } from "../characters/types";
 import { AbilityRuntime } from "./AbilityRuntime";
 import { CharacterModel } from "./CharacterModel";
 import { pickMapPreset, type MapPreset } from "./mapPresets";
+import { createTerrainMaterial } from "./textures";
 import { playSound } from "./sound";
 import { createParticleRenderer, spawnParticleBurst, spawnShockwaveRing } from "./particles";
 import type { BatchedRenderer } from "three.quarks";
@@ -16,10 +17,6 @@ import type { MobSnapshot } from "../network/sync";
 
 const GRID_SIZE = 240; // 10x o tamanho original (24), a pedido
 const BLOCK_SIZE = 1;
-// Chão usa blocos maiores que BLOCK_SIZE só pra não precisar de 57600
-// instâncias (240x240 em blocos de 1 unidade) — isso sozinho derrubava o
-// jogo a ~2fps (medido). Com blocos de 3 unidades vira 6400, tranquilo.
-const GROUND_BLOCK_SIZE = 3;
 const UP = new THREE.Vector3(0, 1, 0);
 const CAMERA_DISTANCE = 7;
 const CAMERA_HEIGHT = 1.6;
@@ -268,32 +265,16 @@ export class Engine {
     this.buildObstacles();
   }
 
+  // Um plano só, com textura PBR real (ver textures.ts) repetida — bem mais
+  // bonito e mais barato de renderizar que os 6400+ cubos do checkerboard
+  // antigo, que só tinha cor sólida por instância.
   private buildGround() {
-    const tilesPerSide = Math.ceil(GRID_SIZE / GROUND_BLOCK_SIZE);
-    const geo = new THREE.BoxGeometry(GROUND_BLOCK_SIZE, GROUND_BLOCK_SIZE, GROUND_BLOCK_SIZE);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
-    const mesh = new THREE.InstancedMesh(geo, mat, tilesPerSide * tilesPerSide);
-    // Chão não precisa projetar sombra (não faz sentido visual nele mesmo) —
-    // só recebe. Isso sozinho já era um desperdício grande em qualquer
-    // tamanho de mapa, só que agora com 6400+ instâncias ficaria realmente caro.
+    const geo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
+    const mat = createTerrainMaterial(this.map.groundTexture, { repeat: GRID_SIZE / 6, roughness: 1 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
     mesh.castShadow = false;
     mesh.receiveShadow = true;
-
-    const colorA = new THREE.Color(this.map.groundColorA);
-    const colorB = new THREE.Color(this.map.groundColorB);
-    const dummy = new THREE.Object3D();
-    let i = 0;
-    for (let xi = 0; xi < tilesPerSide; xi++) {
-      for (let zi = 0; zi < tilesPerSide; zi++) {
-        const x = (xi - tilesPerSide / 2) * GROUND_BLOCK_SIZE;
-        const z = (zi - tilesPerSide / 2) * GROUND_BLOCK_SIZE;
-        dummy.position.set(x, -GROUND_BLOCK_SIZE / 2, z);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
-        mesh.setColorAt(i, (xi + zi) % 2 === 0 ? colorA : colorB);
-        i++;
-      }
-    }
     this.scene.add(mesh);
   }
 
@@ -302,7 +283,7 @@ export class Engine {
   // updateMovement/clampToArena), então na prática ninguém atravessa.
   private buildWalls() {
     const geo = new THREE.BoxGeometry(BLOCK_SIZE, WALL_HEIGHT, BLOCK_SIZE);
-    const mat = new THREE.MeshStandardMaterial({ color: this.map.wallColor, roughness: 0.9 });
+    const mat = createTerrainMaterial("rock", { color: this.map.wallColor, roughness: 0.95 });
     const half = GRID_SIZE / 2;
     const mesh = new THREE.InstancedMesh(geo, mat, GRID_SIZE * 4);
     mesh.castShadow = true;
@@ -345,7 +326,7 @@ export class Engine {
       const height = 1 + Math.random() * 3;
       const size = 1.4 + Math.random() * 1.2;
       const geo = new THREE.BoxGeometry(size, height, size);
-      const material = new THREE.MeshStandardMaterial({ color: this.map.obstacleColor, roughness: 0.8 });
+      const material = createTerrainMaterial("rock", { color: this.map.obstacleColor, roughness: 0.9 });
       const mesh = new THREE.Mesh(geo, material);
       mesh.position.set(x, height / 2, z);
       mesh.castShadow = true;
