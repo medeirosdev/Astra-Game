@@ -1,10 +1,11 @@
-import { generateRoomCode } from "../network/room";
+import { generateRoomCode, modeFromCode, type GameMode } from "../network/room";
 import { CHARACTERS, type CharacterId } from "../characters/characters";
 import type { CharacterIcon } from "../characters/types";
 
 export interface MenuResult {
   code: string;
   characterId: CharacterId;
+  mode: GameMode;
 }
 
 // Um ícone simples por arquétipo (não é o modelo 3D — isso é só a tela de
@@ -20,6 +21,16 @@ const ICONS: Record<CharacterIcon, string> = {
   shield: `<svg viewBox="0 0 24 24" fill="currentColor">
     <path d="M12 2 4 5v6c0 5 3.4 8.5 8 9 4.6-0.5 8-4 8-9V5l-8-3Z"/>
   </svg>`,
+  // Portal/vazio — anéis concêntricos, pro mago de vazio/espaço/tempo.
+  void: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <circle cx="12" cy="12" r="9"/>
+    <circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none"/>
+  </svg>`,
+  // Montanha rachada — terremoto/choque sísmico, pro brigão.
+  quake: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
+    <polygon points="12,3 22,20 2,20"/>
+    <polyline points="12,9 9,14 13,15 10,20"/>
+  </svg>`,
 };
 
 export function showMenu(container: HTMLElement): Promise<MenuResult> {
@@ -27,21 +38,36 @@ export function showMenu(container: HTMLElement): Promise<MenuResult> {
     const characterIds = Object.keys(CHARACTERS) as CharacterId[];
     let selected: CharacterId = characterIds[0];
 
+    let mode: GameMode = "arena";
+
     const el = document.createElement("div");
     el.className = "menu";
     el.innerHTML = `
       <div class="menu-card">
         <h1>ASTRA</h1>
         <div class="character-picker"></div>
+        <div class="mode-picker">
+          <button type="button" class="mode-btn selected" data-mode="arena">Mata-mata</button>
+          <button type="button" class="mode-btn" data-mode="survival">Sobrevivência</button>
+        </div>
         <button id="create-btn">Criar sala</button>
         <div class="menu-divider">ou</div>
         <form id="join-form">
           <input id="join-code" maxlength="5" placeholder="CÓDIGO" autocomplete="off" />
           <button type="submit">Entrar</button>
         </form>
+        <p class="menu-hint">Entrar numa sala usa o modo de quem criou ela.</p>
       </div>
     `;
     container.appendChild(el);
+
+    const modeButtons = el.querySelectorAll<HTMLButtonElement>(".mode-btn");
+    modeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        mode = btn.dataset.mode as GameMode;
+        modeButtons.forEach((b) => b.classList.toggle("selected", b === btn));
+      });
+    });
 
     const picker = el.querySelector(".character-picker")!;
     const cards = new Map<CharacterId, HTMLButtonElement>();
@@ -67,7 +93,7 @@ export function showMenu(container: HTMLElement): Promise<MenuResult> {
 
     el.querySelector("#create-btn")!.addEventListener("click", () => {
       el.remove();
-      resolve({ code: generateRoomCode(), characterId: selected });
+      resolve({ code: generateRoomCode(mode), characterId: selected, mode });
     });
 
     el.querySelector("#join-form")!.addEventListener("submit", (e) => {
@@ -76,7 +102,7 @@ export function showMenu(container: HTMLElement): Promise<MenuResult> {
       const code = input.value.trim().toUpperCase();
       if (code.length === 0) return;
       el.remove();
-      resolve({ code, characterId: selected });
+      resolve({ code, characterId: selected, mode: modeFromCode(code) });
     });
   });
 }

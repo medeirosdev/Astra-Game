@@ -1,10 +1,23 @@
 import { connectSignalingRoom, type WebrtcRoom } from "./webrtcRoom";
 
-export function generateRoomCode(): string {
+export type GameMode = "arena" | "survival";
+
+// O modo vem embutido no próprio código (primeira letra) — assim quem
+// ENTRA numa sala descobre o modo só de digitar o código, sem precisar de
+// mais uma mensagem de rede pra combinar isso (mesma ideia do mapPresets.ts,
+// que deriva o mapa do código; aqui o modo é ESCOLHA de quem cria, não hash,
+// mas ainda viaja "de graça" dentro do código).
+const MODE_PREFIX: Record<GameMode, string> = { arena: "A", survival: "S" };
+
+export function generateRoomCode(mode: GameMode): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  let code = MODE_PREFIX[mode];
+  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return code;
+}
+
+export function modeFromCode(code: string): GameMode {
+  return code.trim().toUpperCase().startsWith("S") ? "survival" : "arena";
 }
 
 // Servidor de sinalização próprio (server/index.js) — os trackers públicos do

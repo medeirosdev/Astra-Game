@@ -169,6 +169,37 @@ body {
 
 .menu-divider { opacity: 0.5; font-size: 12px; }
 
+.mode-picker {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 8px !important;
+  background: rgba(10, 10, 18, 0.6) !important;
+  border: 1px solid #333a52;
+  border-radius: 6px;
+  color: #aab0c8 !important;
+  font-size: 12px;
+  font-weight: 600 !important;
+  cursor: pointer;
+}
+
+.mode-btn.selected {
+  border-color: #4fa3ff;
+  color: #eef2ff !important;
+  box-shadow: 0 0 8px -2px #4fa3ff;
+}
+
+.menu-hint {
+  font-size: 11px;
+  opacity: 0.5;
+  text-align: center;
+  margin: 2px 0 0;
+}
+
 #join-form { display: flex; gap: 8px; }
 
 #join-code {
@@ -301,6 +332,39 @@ body {
   font-weight: 600;
   letter-spacing: 1px;
 }
+
+/* Modo Sobrevivência — mesma posição do match-timer (os dois modos nunca
+   aparecem juntos, ver main.ts). */
+.wave-info {
+  display: none;
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 10, 18, 0.6);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #ff9d6b;
+}
+
+.boss-bar {
+  display: none;
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 360px;
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(10, 10, 18, 0.6);
+  border: 1px solid rgba(255, 90, 60, 0.4);
+  overflow: hidden;
+}
+
+.bar-fill.boss { background: #ff4d1a; }
 
 .scoreboard {
   position: absolute;

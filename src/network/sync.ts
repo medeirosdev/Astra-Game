@@ -6,6 +6,10 @@ export interface PositionPayload {
   z: number;
   yaw: number;
   alive: boolean;
+  // "Passo Fantasma" (ver characters.ts) — invisível pros OUTROS peers,
+  // esconde o avatar remoto por completo (eu mesmo ainda me vejo, semi
+  // transparente, ver Engine.setLocalInvisible).
+  invisible: boolean;
 }
 
 export interface CastPayload {
@@ -18,6 +22,11 @@ export interface CastPayload {
   // clipe alterna em combo e não dá pra derivar só do abilityId. Ausente
   // pras outras habilidades, que usam a animação padrão do target.kind.
   anim?: string;
+  // Multiplicador de dano de quem castou (ver "damageBuff" em
+  // abilities/types.ts) — quem decide o valor final do dano é sempre quem
+  // apanha, então o buff do atacante precisa viajar junto. Ausente (= 1x)
+  // na maioria dos casts.
+  dmgMult?: number;
 }
 
 export interface HelloPayload {
@@ -49,6 +58,36 @@ export interface HitFeedbackPayload {
 // Cor neutra usada até o "hello" do peer chegar dizendo qual personagem ele escolheu.
 export const PLACEHOLDER_COLOR = "#888888";
 
+// Modo Sobrevivência (ver src/game/survival.ts) — só o host da sala manda
+// mobState (broadcast, ~10Hz) e mobAttack (mandado direto pra quem apanhou);
+// qualquer peer manda mobHit direto pro host quando acha que acertou um mob.
+export interface MobSnapshot {
+  id: string;
+  typeId: string;
+  x: number;
+  y: number;
+  z: number;
+  health: number;
+  maxHealth: number;
+  alive: boolean;
+}
+
+export interface SurvivalStatePayload {
+  wave: number;
+  totalWaves: number;
+  phase: string;
+  mobs: MobSnapshot[];
+}
+
+export interface MobHitPayload {
+  mobId: string;
+  amount: number;
+}
+
+export interface MobAttackPayload {
+  amount: number;
+}
+
 // Ações da sala: posição+direção do jogador e cast de habilidade, replicadas
 // pra todo peer conectado. Quem decide se um cast acertou é sempre o alvo
 // (ver AbilityRuntime.ts) — aqui só propaga o que já foi decidido localmente.
@@ -59,6 +98,9 @@ export function setupSync(room: GameRoom) {
   const [sendKillCredit, onKillCredit] = room.makeAction<KillCreditPayload>("kill");
   const [sendScore, onScore] = room.makeAction<ScorePayload>("score");
   const [sendHitFeedback, onHitFeedback] = room.makeAction<HitFeedbackPayload>("hit");
+  const [sendSurvivalState, onSurvivalState] = room.makeAction<SurvivalStatePayload>("survivalState");
+  const [sendMobHit, onMobHit] = room.makeAction<MobHitPayload>("mobHit");
+  const [sendMobAttack, onMobAttack] = room.makeAction<MobAttackPayload>("mobAttack");
   return {
     sendPosition,
     onPosition,
@@ -72,5 +114,11 @@ export function setupSync(room: GameRoom) {
     onScore,
     sendHitFeedback,
     onHitFeedback,
+    sendSurvivalState,
+    onSurvivalState,
+    sendMobHit,
+    onMobHit,
+    sendMobAttack,
+    onMobAttack,
   };
 }

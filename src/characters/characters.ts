@@ -62,6 +62,45 @@ export const CHARACTERS = {
     // pesado — combina com o cooldown mais lento dele.
     comboAnims: ["Sword_Regular_A", "OverhandThrow"],
   },
+  johnKaisen: {
+    id: "johnKaisen",
+    name: "John Kaisen",
+    color: "#5b2a8c",
+    modelUrl: "/models/superhero-male.glb",
+    tagline: "Vazio, espaço e tempo",
+    icon: "void",
+    // Mago de controle à distância — não quer chegar perto: puxa o
+    // inimigo pra ele (Ruptura do Espaço) em vez de ir até ele, fica
+    // invisível pra escapar/reposicionar (Passo Fantasma) e ganha
+    // velocidade no meio do próprio dano em área (Ruptura do Tempo).
+    stats: { health: 95, energy: 115, energyRegenPerSec: 8, moveSpeed: 6.2, guard: 70, guardRegenPerSec: 15 },
+    loadout: {
+      common: ["rupturaDoVazio", "passoFantasma"],
+      strong: ["rupturaDoEspaco", "rupturaDoTempo"],
+      super: "expansaoDeDominio",
+    },
+    basicAttackId: "johnKaisenSoco",
+    comboAnims: ["Sword_Regular_B", "Melee_Hook"],
+  },
+  ronnie: {
+    id: "ronnie",
+    name: "Ronnie",
+    color: "#c94b2b",
+    modelUrl: "/models/superhero-male.glb",
+    tagline: "Fúria e terremotos",
+    icon: "quake",
+    // Brigão bruto — nada de magia sofisticada: dano físico alto, uma
+    // fúria que aumenta dano E velocidade juntos, e dois jeitos de sacudir
+    // o chão (terremoto em área, choque sísmico que empurra todo mundo).
+    stats: { health: 120, energy: 95, energyRegenPerSec: 7.5, moveSpeed: 5.5, guard: 100, guardRegenPerSec: 11 },
+    loadout: {
+      common: ["ronnieAtaqueBasico", "ativaRage"],
+      strong: ["superTerremoto", "puloMortal"],
+      super: "choqueSismico",
+    },
+    basicAttackId: "ronnieSoco",
+    comboAnims: ["Melee_Hook", "Punch_Cross"],
+  },
 } satisfies Record<string, CharacterDef>;
 
 export type CharacterId = keyof typeof CHARACTERS;

@@ -10,7 +10,7 @@ export const ABILITIES = {
     cost: 20,
     cooldownMs: 3000,
     target: { kind: "projectile", speed: 25 },
-    effect: { kind: "damage", amount: 25 },
+    effect: [{ kind: "damage", amount: 25 }],
     vfx: { color: "#4fa3ff", particle: "spark", sound: "whoosh" },
   },
   golpeRapido: {
@@ -20,7 +20,7 @@ export const ABILITIES = {
     cost: 10,
     cooldownMs: 1500,
     target: { kind: "instant" },
-    effect: { kind: "damage", amount: 12 },
+    effect: [{ kind: "damage", amount: 12 }],
     vfx: { color: "#ffffff", sound: "hit" },
   },
   ondaDeChoque: {
@@ -30,7 +30,7 @@ export const ABILITIES = {
     cost: 40,
     cooldownMs: 8000,
     target: { kind: "area", radius: 5 },
-    effect: { kind: "stun", durationMs: 1200 },
+    effect: [{ kind: "stun", durationMs: 1200 }],
     vfx: { color: "#ffb347", particle: "shock" },
   },
   passoRapido: {
@@ -40,7 +40,7 @@ export const ABILITIES = {
     cost: 15,
     cooldownMs: 6000,
     target: { kind: "self" },
-    effect: { kind: "speedBuff", factor: 1.5, durationMs: 2000 },
+    effect: [{ kind: "speedBuff", factor: 1.5, durationMs: 2000 }],
     vfx: { color: "#7dffb3", particle: "trail" },
   },
   explosaoDefinitiva: {
@@ -50,7 +50,7 @@ export const ABILITIES = {
     cost: 100,
     cooldownMs: 45000,
     target: { kind: "area", radius: 10 },
-    effect: { kind: "damage", amount: 80 },
+    effect: [{ kind: "damage", amount: 80 }],
     vfx: { color: "#ff3b3b", particle: "nova", sound: "boom" },
   },
   rajadaDeGelo: {
@@ -60,7 +60,7 @@ export const ABILITIES = {
     cost: 15,
     cooldownMs: 4000,
     target: { kind: "projectile", speed: 20 },
-    effect: { kind: "slow", factor: 0.5, durationMs: 2000 },
+    effect: [{ kind: "slow", factor: 0.5, durationMs: 2000 }],
     vfx: { color: "#8fe8ff", particle: "frost", sound: "chill" },
   },
   curaRapida: {
@@ -70,7 +70,7 @@ export const ABILITIES = {
     cost: 25,
     cooldownMs: 5000,
     target: { kind: "self" },
-    effect: { kind: "heal", amount: 20 },
+    effect: [{ kind: "heal", amount: 20 }],
     vfx: { color: "#7dffb3", particle: "glow", sound: "chime" },
   },
   toqueEletrico: {
@@ -80,7 +80,7 @@ export const ABILITIES = {
     cost: 15,
     cooldownMs: 4000,
     target: { kind: "instant" },
-    effect: { kind: "stun", durationMs: 700 },
+    effect: [{ kind: "stun", durationMs: 700 }],
     vfx: { color: "#f7ff5c", particle: "lightning", sound: "zap" },
   },
   investidaFeroz: {
@@ -90,7 +90,7 @@ export const ABILITIES = {
     cost: 30,
     cooldownMs: 7000,
     target: { kind: "self" },
-    effect: { kind: "speedBuff", factor: 2, durationMs: 1500 },
+    effect: [{ kind: "speedBuff", factor: 2, durationMs: 1500 }],
     vfx: { color: "#ff9d4f", particle: "trail", sound: "dash" },
   },
   domoDeProtecao: {
@@ -100,7 +100,7 @@ export const ABILITIES = {
     cost: 45,
     cooldownMs: 10000,
     target: { kind: "self" },
-    effect: { kind: "heal", amount: 45 },
+    effect: [{ kind: "heal", amount: 45 }],
     vfx: { color: "#9ad1ff", particle: "shield", sound: "hum" },
   },
   meteoro: {
@@ -110,7 +110,7 @@ export const ABILITIES = {
     cost: 90,
     cooldownMs: 40000,
     target: { kind: "projectile", speed: 18 },
-    effect: { kind: "damage", amount: 90 },
+    effect: [{ kind: "damage", amount: 90 }],
     vfx: { color: "#ff6b3b", particle: "nova", sound: "boom" },
   },
   tempestadeDeGelo: {
@@ -120,7 +120,7 @@ export const ABILITIES = {
     cost: 85,
     cooldownMs: 40000,
     target: { kind: "area", radius: 8 },
-    effect: { kind: "slow", factor: 0.3, durationMs: 4000 },
+    effect: [{ kind: "slow", factor: 0.3, durationMs: 4000 }],
     vfx: { color: "#c9f2ff", particle: "frost", sound: "windgust" },
   },
   teleporte: {
@@ -130,7 +130,7 @@ export const ABILITIES = {
     cost: 30,
     cooldownMs: 9000,
     target: { kind: "self" },
-    effect: { kind: "teleport", distance: 8 },
+    effect: [{ kind: "teleport", distance: 8 }],
     vfx: { color: "#c86bff", particle: "warp", sound: "blink" },
   },
   toqueVazio: {
@@ -140,7 +140,7 @@ export const ABILITIES = {
     cost: 12,
     cooldownMs: 1400,
     target: { kind: "instant" },
-    effect: { kind: "damage", amount: 15 },
+    effect: [{ kind: "damage", amount: 15 }],
     vfx: { color: "#7b5cff", particle: "spark", sound: "hit" },
   },
   infinito: {
@@ -150,7 +150,7 @@ export const ABILITIES = {
     cost: 15,
     cooldownMs: 5000,
     target: { kind: "self" },
-    effect: { kind: "speedBuff", factor: 1.6, durationMs: 2000 },
+    effect: [{ kind: "speedBuff", factor: 1.6, durationMs: 2000 }],
     vfx: { color: "#9ad1ff", particle: "shield", sound: "hum" },
   },
   efluvioRoxo: {
@@ -160,7 +160,7 @@ export const ABILITIES = {
     cost: 50,
     cooldownMs: 9000,
     target: { kind: "projectile", speed: 30 },
-    effect: { kind: "damage", amount: 55 },
+    effect: [{ kind: "damage", amount: 55 }],
     vfx: { color: "#b833ff", particle: "nova", sound: "boom" },
   },
   piscar: {
@@ -170,7 +170,7 @@ export const ABILITIES = {
     cost: 25,
     cooldownMs: 6000,
     target: { kind: "self" },
-    effect: { kind: "teleport", distance: 10 },
+    effect: [{ kind: "teleport", distance: 10 }],
     vfx: { color: "#c86bff", particle: "warp", sound: "blink" },
   },
   dominioVazio: {
@@ -180,8 +180,134 @@ export const ABILITIES = {
     cost: 110,
     cooldownMs: 50000,
     target: { kind: "area", radius: 12 },
-    effect: { kind: "damage", amount: 100 },
+    effect: [{ kind: "damage", amount: 100 }],
     vfx: { color: "#7b5cff", particle: "nova", sound: "boom" },
+  },
+
+  // John Kaisen (criado por Thiago) — mago de vazio/espaço/tempo: controle
+  // e burst de dano à distância, sem chegar perto.
+  rupturaDoVazio: {
+    id: "rupturaDoVazio",
+    name: "Ruptura do Vazio",
+    tier: "common",
+    cost: 18,
+    cooldownMs: 3200,
+    target: { kind: "projectile", speed: 22 },
+    effect: [{ kind: "damage", amount: 22 }],
+    vfx: { color: "#5b2a8c", particle: "nova", sound: "boom" },
+  },
+  passoFantasma: {
+    id: "passoFantasma",
+    name: "Passo Fantasma",
+    tier: "common",
+    cost: 20,
+    cooldownMs: 7000,
+    target: { kind: "self" },
+    effect: [
+      { kind: "heal", amount: 18 },
+      { kind: "invisible", durationMs: 2200 },
+    ],
+    vfx: { color: "#8f7bd8", particle: "warp", sound: "blink" },
+  },
+  rupturaDoEspaco: {
+    id: "rupturaDoEspaco",
+    name: "Ruptura do Espaço",
+    tier: "strong",
+    cost: 45,
+    cooldownMs: 9500,
+    target: { kind: "projectile", speed: 26 },
+    effect: [
+      { kind: "damage", amount: 48 },
+      { kind: "pull", distance: 4 },
+    ],
+    vfx: { color: "#3d1a5c", particle: "warp", sound: "boom" },
+  },
+  rupturaDoTempo: {
+    id: "rupturaDoTempo",
+    name: "Ruptura do Tempo",
+    tier: "strong",
+    cost: 50,
+    cooldownMs: 11000,
+    target: { kind: "area", radius: 6 },
+    effect: [{ kind: "damage", amount: 30 }],
+    // +60% de velocidade pra quem castou, além do dano em quem tiver perto.
+    selfEffect: [{ kind: "speedBuff", factor: 1.6, durationMs: 2500 }],
+    vfx: { color: "#7b5cff", particle: "shock", sound: "windgust" },
+  },
+  expansaoDeDominio: {
+    id: "expansaoDeDominio",
+    name: "Expansão de Domínio",
+    tier: "super",
+    cost: 115,
+    cooldownMs: 55000,
+    target: { kind: "area", radius: 14 },
+    effect: [
+      { kind: "damage", amount: 70 },
+      { kind: "slow", factor: 0.25, durationMs: 4000 },
+    ],
+    vfx: { color: "#2a0f47", particle: "nova", sound: "boom" },
+  },
+
+  // Ronnie (criado por Daniel) — brigão bruto, sem magia: dano físico,
+  // fúria e golpes de área que sacodem o chão.
+  ronnieAtaqueBasico: {
+    id: "ronnieAtaqueBasico",
+    name: "Ataque Básico",
+    tier: "common",
+    cost: 15,
+    cooldownMs: 2500,
+    target: { kind: "instant" },
+    effect: [{ kind: "damage", amount: 20 }],
+    vfx: { color: "#ff9d4f", particle: "spark", sound: "hit" },
+  },
+  ativaRage: {
+    id: "ativaRage",
+    name: "Ativa Rage",
+    tier: "common",
+    cost: 30,
+    cooldownMs: 14000,
+    target: { kind: "self" },
+    effect: [
+      { kind: "damageBuff", factor: 1.5, durationMs: 5000 },
+      { kind: "speedBuff", factor: 1.5, durationMs: 5000 },
+    ],
+    vfx: { color: "#ff3b1a", particle: "shock", sound: "dash" },
+  },
+  superTerremoto: {
+    id: "superTerremoto",
+    name: "Super Terremoto",
+    tier: "strong",
+    cost: 42,
+    cooldownMs: 9000,
+    target: { kind: "area", radius: 7 },
+    effect: [
+      { kind: "damage", amount: 35 },
+      { kind: "stun", durationMs: 900 },
+    ],
+    vfx: { color: "#c97a3b", particle: "shock", sound: "boom" },
+  },
+  puloMortal: {
+    id: "puloMortal",
+    name: "Pulo Mortal",
+    tier: "strong",
+    cost: 48,
+    cooldownMs: 10000,
+    target: { kind: "area", radius: 5 },
+    effect: [{ kind: "damage", amount: 40 }],
+    lunge: 6, // salta pra frente ANTES da área resolver — acerta onde caiu
+    castAnim: "NinjaJump_Start",
+    vfx: { color: "#8b5a2b", particle: "nova", sound: "boom" },
+  },
+  choqueSismico: {
+    id: "choqueSismico",
+    name: "Choque Sísmico",
+    tier: "super",
+    cost: 115,
+    cooldownMs: 55000,
+    target: { kind: "area", radius: 13 },
+    effect: [{ kind: "damage", amount: 85 }],
+    knockback: 3.5,
+    vfx: { color: "#ff4d1a", particle: "nova", sound: "boom" },
   },
 
   // Socos do botão esquerdo do mouse — uma receita por personagem (ver
@@ -194,7 +320,7 @@ export const ABILITIES = {
     cost: 0,
     cooldownMs: 380,
     target: { kind: "instant" },
-    effect: { kind: "damage", amount: 9 },
+    effect: [{ kind: "damage", amount: 9 }],
     lunge: 1.2,
     knockback: 1,
     vfx: { color: "#ffffff", particle: "spark", sound: "hit" },
@@ -206,7 +332,7 @@ export const ABILITIES = {
     cost: 0,
     cooldownMs: 650,
     target: { kind: "instant" },
-    effect: { kind: "damage", amount: 15 },
+    effect: [{ kind: "damage", amount: 15 }],
     lunge: 0.8,
     knockback: 2, // mais lento, mas o golpe pesa — empurra mais longe
     vfx: { color: "#ffffff", particle: "shock", sound: "hit" },
@@ -218,10 +344,34 @@ export const ABILITIES = {
     cost: 0,
     cooldownMs: 260,
     target: { kind: "instant" },
-    effect: { kind: "damage", amount: 6 },
+    effect: [{ kind: "damage", amount: 6 }],
     lunge: 1.6,
     knockback: 0.5, // socos rápidos e fracos, mal empurram
     vfx: { color: "#7b5cff", particle: "spark", sound: "hit" },
+  },
+  johnKaisenSoco: {
+    id: "johnKaisenSoco",
+    name: "Golpe Amaldiçoado",
+    tier: "basic",
+    cost: 0,
+    cooldownMs: 420,
+    target: { kind: "instant" },
+    effect: [{ kind: "damage", amount: 8 }],
+    lunge: 1.1,
+    knockback: 0.8,
+    vfx: { color: "#5b2a8c", particle: "spark", sound: "hit" },
+  },
+  ronnieSoco: {
+    id: "ronnieSoco",
+    name: "Soco",
+    tier: "basic",
+    cost: 0,
+    cooldownMs: 430,
+    target: { kind: "instant" },
+    effect: [{ kind: "damage", amount: 11 }],
+    lunge: 1,
+    knockback: 1.2,
+    vfx: { color: "#ffffff", particle: "spark", sound: "hit" },
   },
 } satisfies Record<string, Ability>;
 

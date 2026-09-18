@@ -3,7 +3,7 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import type { Ability } from "../abilities/types";
+import type { Ability, AbilityEffect } from "../abilities/types";
 import type { CharacterDef } from "../characters/types";
 import { AbilityRuntime } from "./AbilityRuntime";
 import { CharacterModel } from "./CharacterModel";
@@ -11,6 +11,8 @@ import { pickMapPreset, type MapPreset } from "./mapPresets";
 import { playSound } from "./sound";
 import { createParticleRenderer, spawnParticleBurst, spawnShockwaveRing } from "./particles";
 import type { BatchedRenderer } from "three.quarks";
+import { MOB_TYPES } from "./mobs";
+import type { MobSnapshot } from "../network/sync";
 
 const GRID_SIZE = 240; // 10x o tamanho original (24), a pedido
 const BLOCK_SIZE = 1;
@@ -31,6 +33,9 @@ const ARENA_BOUND = GRID_SIZE / 2 - 1;
 const OBSTACLE_COUNT = 140;
 const OBSTACLE_CLEAR_RADIUS = 8; // sem obstáculo em cima do spawn
 const OBSTACLE_MELEE_REACH = 3; // mesmo alcance corpo-a-corpo usado contra jogadores (ver combat.ts)
+// Mesma constante, exportada — reaproveitada em main.ts pra checar acerto em
+// mob no modo Sobrevivência (ver findMobsInRange).
+export const MELEE_REACH = OBSTACLE_MELEE_REACH;
 
 const GRAVITY = 22; // unidades/s² — só afeta o pulo, não é física de verdade
 const JUMP_SPEED = 8; // velocidade vertical inicial do pulo
@@ -58,6 +63,10 @@ interface Projectile {
   bornAt: number;
   damage: number | null;
   vfx: Ability["vfx"];
+  // Só true pro projétil que EU disparei (não a réplica visual de um cast
+  // de outro peer) — evita reportar o mesmo acerto em mob mais de uma vez
+  // (ver Engine.onProjectileHitMob / main.ts).
+  isLocal: boolean;
 }
 
 interface Obstacle {
@@ -79,6 +88,11 @@ interface RemotePlayer {
   yaw: number;
 }
 
+interface MobVisual {
+  group: THREE.Group;
+  target: THREE.Vector3;
+}
+
 export interface Transform {
   x: number;
   y: number;
@@ -93,6 +107,16 @@ function attackAnimationFor(ability: Ability): string {
   return ability.target.kind === "instant" ? "Punch_Cross" : "Spell_Simple_Shoot";
 }
 
+// Acha um efeito de um certo tipo dentro da lista (ver Ability.effect em
+// abilities/types.ts) — a maioria dos poderes só tem um, mas alguns
+// combinam vários (dano + lentidão, cura + invisibilidade...).
+function findEffect<K extends AbilityEffect["kind"]>(
+  effects: AbilityEffect[],
+  kind: K,
+): Extract<AbilityEffect, { kind: K }> | undefined {
+  return effects.find((e) => e.kind === kind) as Extract<AbilityEffect, { kind: K }> | undefined;
+}
+
 export class Engine {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -104,6 +128,7 @@ export class Engine {
   private readonly keys = new Set<string>();
   private readonly projectiles: Projectile[] = [];
   private readonly obstacles: Obstacle[] = [];
+  private readonly mobs = new Map<string, MobVisual>();
   private readonly remotePlayers = new Map<string, RemotePlayer>();
   private readonly sun: THREE.DirectionalLight;
   private readonly particleRenderer: BatchedRenderer;
@@ -130,6 +155,10 @@ export class Engine {
   private attackTrailUntil = 0;
   private lastTrailSampleAt = 0;
   readonly runtime: AbilityRuntime;
+  // Disparado quando um projétil MEU (isLocal, ver Projectile) atinge um
+  // mob — main.ts usa isso pra reportar dano no modo Sobrevivência, mesma
+  // ideia de findMobsInRange pra instant/área (ver reportMobHits em main.ts).
+  onProjectileHitMob: ((mobId: string, damage: number) => void) | null = null;
 
   private readonly onHudUpdate: (runtime: AbilityRuntime) => void;
   private readonly map: MapPreset;
@@ -365,12 +394,13 @@ export class Engine {
   // compartilhado e estático, então todo peer processa o mesmo cast (local ou
   // recebido) e chega no mesmo resultado sem precisar de mensagem extra).
   private resolveObstacleHits(ability: Ability, origin: THREE.Vector3) {
-    if (ability.effect.kind !== "damage") return;
+    const damage = findEffect(ability.effect, "damage");
+    if (!damage) return;
     const reach = ability.target.kind === "instant" ? OBSTACLE_MELEE_REACH : ability.target.kind === "area" ? ability.target.radius : null;
     if (reach === null) return;
     for (const obstacle of this.obstacles) {
       if (!obstacle.destroyed && obstacle.position.distanceTo(origin) <= reach + obstacle.radius) {
-        this.damageObstacle(obstacle, ability.effect.amount);
+        this.damageObstacle(obstacle, damage.amount);
         // Cada peer roda esse cálculo do mesmo jeito (ver about.md — estado
         // compartilhado, sem precisar de mensagem extra), então isso já dá
         // o impacto físico certo tanto pro soco local quanto pra réplica do
@@ -378,6 +408,76 @@ export class Engine {
         if (ability.tier === "basic") this.triggerImpact(obstacle.position);
       }
     }
+  }
+
+  // Corpo simples de mob (nenhum asset baixado de propósito — o pack de
+  // personagem já foi trabalho suficiente, ver public/models/CREDITS.txt):
+  // um sólido baixo-poli colorido por tipo (ver mobs.ts) com "olhos"
+  // emissivos, o bloom já cuida do resto.
+  private createMobMesh(typeId: string): THREE.Group {
+    const type = MOB_TYPES[typeId];
+    const group = new THREE.Group();
+    const bodyGeo = new THREE.IcosahedronGeometry(0.6 * type.scale, 0);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: type.color, roughness: 0.7, flatShading: true });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 0.6 * type.scale;
+    body.castShadow = true;
+    group.add(body);
+
+    const eyeGeo = new THREE.SphereGeometry(0.09 * type.scale, 6, 6);
+    const eyeMat = new THREE.MeshStandardMaterial({ color: "#ff2a2a", emissive: "#ff2a2a", emissiveIntensity: 3 });
+    for (const side of [-1, 1]) {
+      const eye = new THREE.Mesh(eyeGeo, eyeMat);
+      eye.position.set(side * 0.22 * type.scale, 0.72 * type.scale, 0.48 * type.scale);
+      group.add(eye);
+    }
+    return group;
+  }
+
+  // Cria/atualiza/remove os mobs em cena a partir do snapshot mais recente
+  // (do host de verdade, ou repassado por rede — ver survival.ts/sync.ts).
+  // Chamado todo frame pelo host (direto do seu próprio SurvivalState) e a
+  // cada broadcast recebido pelos outros peers.
+  updateMobs(snapshots: MobSnapshot[]) {
+    const seen = new Set<string>();
+    for (const snap of snapshots) {
+      seen.add(snap.id);
+      let visual = this.mobs.get(snap.id);
+      if (!visual) {
+        const group = this.createMobMesh(snap.typeId);
+        group.position.set(snap.x, snap.y, snap.z);
+        this.scene.add(group);
+        visual = { group, target: new THREE.Vector3(snap.x, snap.y, snap.z) };
+        this.mobs.set(snap.id, visual);
+      }
+      visual.target.set(snap.x, snap.y, snap.z);
+      visual.group.visible = snap.alive;
+    }
+    for (const [id, visual] of this.mobs) {
+      if (seen.has(id)) continue;
+      this.scene.remove(visual.group);
+      this.mobs.delete(id);
+    }
+  }
+
+  private updateMobVisuals(dt: number) {
+    for (const visual of this.mobs.values()) {
+      if (!visual.group.visible) continue;
+      visual.group.position.lerp(visual.target, Math.min(1, dt * 8));
+      visual.group.lookAt(this.player.position.x, visual.group.position.y, this.player.position.z);
+    }
+  }
+
+  // IDs dos mobs vivos dentro do alcance — usado no modo Sobrevivência pra
+  // saber se um soco/golpe em área acertou algum (ver main.ts). Só cobre
+  // instant/área de propósito; projétil não checa mob nessa primeira leva.
+  findMobsInRange(origin: { x: number; y: number; z: number }, reach: number): string[] {
+    const originVec = new THREE.Vector3(origin.x, origin.y, origin.z);
+    const hits: string[] = [];
+    for (const [id, visual] of this.mobs) {
+      if (visual.group.visible && visual.group.position.distanceTo(originVec) <= reach) hits.push(id);
+    }
+    return hits;
   }
 
   private onResize() {
@@ -412,6 +512,7 @@ export class Engine {
     const now = performance.now();
     this.updateDeathState(now);
     this.playerModel.update(dt);
+    this.setLocalInvisible(this.runtime.isInvisible(now));
 
     if (this.frozen || this.runtime.isDead(now)) {
       this.updateCamera();
@@ -551,6 +652,25 @@ export class Engine {
     this.clampToArena(this.player.position);
   }
 
+  // O oposto do knockback — puxa o jogador local em direção a quem castou
+  // (ver "Ruptura do Espaço" em characters.ts). Não deixa passar por cima
+  // de quem puxou nem sair do mapa.
+  applyPull(fromOrigin: { x: number; y: number; z: number }, distance: number) {
+    const dir = new THREE.Vector3(fromOrigin.x - this.player.position.x, 0, fromOrigin.z - this.player.position.z);
+    const gap = dir.length();
+    if (gap < 0.001) return;
+    dir.normalize();
+    this.player.position.addScaledVector(dir, Math.min(distance, Math.max(0, gap - 0.5)));
+    this.clampToArena(this.player.position);
+  }
+
+  // Invisibilidade (ver "Passo Fantasma") — eu ainda me vejo, semi
+  // transparente como pista visual; quem tá invisível pros OUTROS peers é
+  // decidido em updateRemotePlayers, a partir do PositionPayload.invisible.
+  setLocalInvisible(active: boolean) {
+    this.playerModel.setOpacity(active ? 0.35 : 1);
+  }
+
   // Tropeço breve de quem apanhou — chamado tanto pro jogador local quanto
   // (via playRemoteAnimation-like path) pra peers remotos.
   playLocalHitReaction() {
@@ -627,12 +747,12 @@ export class Engine {
     remote.group.add(remote.model.group);
   }
 
-  updateRemotePlayer(peerId: string, transform: Transform & { alive: boolean }) {
+  updateRemotePlayer(peerId: string, transform: Transform & { alive: boolean; invisible: boolean }) {
     const remote = this.remotePlayers.get(peerId);
     if (!remote) return;
     remote.target.set(transform.x, transform.y, transform.z);
     remote.yaw = transform.yaw;
-    remote.group.visible = transform.alive;
+    remote.group.visible = transform.alive && !transform.invisible;
   }
 
   // `anim` sobrescreve a animação padrão — usado pelo soco básico, cujo
@@ -669,22 +789,25 @@ export class Engine {
   // de rede pros peers reproduzirem o mesmo clipe (importante pro combo do
   // soco básico, que não dá pra derivar só do ability.id).
   castAbility(ability: Ability): string {
-    this.castAbilityAt(ability, this.player.position, this.yaw);
-    const anim = ability.tier === "basic" ? this.comboAnims[this.comboIndex++ % this.comboAnims.length] : attackAnimationFor(ability);
+    // Lunge ANTES de resolver o cast — pra poderes tipo "Pulo Mortal" (pula
+    // pra frente e bate no chão), a área tem que acertar onde eu aterrissei,
+    // não de onde eu saltei.
+    if (ability.lunge) {
+      this.player.position.addScaledVector(this.forward(), ability.lunge);
+      this.clampToArena(this.player.position);
+    }
+    this.castAbilityAt(ability, this.player.position, this.yaw, true);
+    const anim = ability.tier === "basic" ? this.comboAnims[this.comboIndex++ % this.comboAnims.length] : (ability.castAnim ?? attackAnimationFor(ability));
     this.playerModel.playOnce(anim, "Idle_Loop");
     // Segura o loop de movimento de trocar a pose de volta antes da hora
     // (ele roda todo frame) e, pro soco básico, abre a janela do rastro.
     const now = performance.now();
     this.actionLockUntil = Math.max(this.actionLockUntil, now + ATTACK_ACTION_LOCK_MS);
     if (ability.tier === "basic") this.attackTrailUntil = now + ATTACK_TRAIL_WINDOW_MS;
-    if (ability.lunge) {
-      this.player.position.addScaledVector(this.forward(), ability.lunge);
-      this.clampToArena(this.player.position);
-    }
     return anim;
   }
 
-  castAbilityAt(ability: Ability, origin: { x: number; y: number; z: number }, yaw = 0) {
+  castAbilityAt(ability: Ability, origin: { x: number; y: number; z: number }, yaw = 0, isLocal = false) {
     const originVec = new THREE.Vector3(origin.x, origin.y, origin.z);
     playSound(ability.vfx.sound);
     if (ability.target.kind === "projectile") {
@@ -699,8 +822,8 @@ export class Engine {
       mesh.position.copy(originVec).add(new THREE.Vector3(0, 0.5, 0)).addScaledVector(forward, 1);
       const velocity = forward.clone().multiplyScalar(ability.target.speed);
       this.scene.add(mesh);
-      const damage = ability.effect.kind === "damage" ? ability.effect.amount : null;
-      this.projectiles.push({ mesh, velocity, bornAt: performance.now(), damage, vfx: ability.vfx });
+      const damage = findEffect(ability.effect, "damage")?.amount ?? null;
+      this.projectiles.push({ mesh, velocity, bornAt: performance.now(), damage, vfx: ability.vfx, isLocal });
       // "boca" do disparo — o rastro em voo já é o mesh brilhante acima.
       spawnParticleBurst(this.scene, this.particleRenderer, ability.vfx.particle, mesh.position, ability.vfx.color);
     }
@@ -748,6 +871,25 @@ export class Engine {
           this.removeProjectile(i);
           continue;
         }
+
+        // Só o projétil que EU disparei reporta acerto em mob — a réplica
+        // visual de um cast recebido de outro peer não teria como decidir
+        // "o host aplica dano" sem duplicar (ver onProjectileHitMob).
+        if (p.isLocal && this.onProjectileHitMob) {
+          let mobHit: string | null = null;
+          for (const [id, visual] of this.mobs) {
+            if (visual.group.visible && visual.group.position.distanceTo(p.mesh.position) <= 0.9) {
+              mobHit = id;
+              break;
+            }
+          }
+          if (mobHit) {
+            this.onProjectileHitMob(mobHit, p.damage);
+            spawnParticleBurst(this.scene, this.particleRenderer, p.vfx.particle, p.mesh.position, p.vfx.color);
+            this.removeProjectile(i);
+            continue;
+          }
+        }
       }
 
       if (now - p.bornAt > 3000) {
@@ -781,6 +923,7 @@ export class Engine {
       this.updateSun();
       this.updateProjectiles(dt);
       this.updateRemotePlayers(dt);
+      this.updateMobVisuals(dt);
       this.updateAttackTrail();
       this.particleRenderer.update(dt);
       this.onHudUpdate(this.runtime);

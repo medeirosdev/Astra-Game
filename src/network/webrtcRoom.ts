@@ -22,6 +22,12 @@ export interface WebrtcRoom {
   // outro peer" quando a rede espalha um evento pra todo mundo (ver
   // main.ts, feedback de acerto de soco).
   getSelfId(): string | null;
+  // Verdade se eu era o único na sala no instante em que entrei — usado pra
+  // decidir quem é "dono" da simulação dos mobs no modo Sobrevivência (ver
+  // src/game/survival.ts). Não é um conceito novo de host-autoritativo pro
+  // jogo todo, só pros mobs — jogador contra jogador continua "quem recebe
+  // decide" (ver about.md).
+  getIsHost(): boolean;
 }
 
 // Sala P2P de verdade: o servidor de sinalização só serve pra trocar
@@ -34,8 +40,10 @@ export function connectSignalingRoom(url: string, roomCode: string): WebrtcRoom 
   const peers = new Map<string, PeerLink>();
   const handlersByNs = new Map<string, ActionHandler[]>();
   let selfId: string | null = null;
-  signal.onJoined = (id) => {
+  let isHost = false;
+  signal.onJoined = (id, existingPeers) => {
     selfId = id;
+    isHost = existingPeers.length === 0;
   };
 
   let joinListener: (peerId: string) => void = () => {};
@@ -164,5 +172,6 @@ export function connectSignalingRoom(url: string, roomCode: string): WebrtcRoom 
       return result;
     },
     getSelfId: () => selfId,
+    getIsHost: () => isHost,
   };
 }

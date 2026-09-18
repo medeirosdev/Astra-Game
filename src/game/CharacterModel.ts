@@ -57,6 +57,9 @@ export class CharacterModel {
   // Ossos das mãos — usados pra desenhar o rastro do soco/chute seguindo a
   // posição real da mão durante o swing (ver Engine.updateAttackTrail).
   private handBones: THREE.Object3D[] = [];
+  // Materiais (já clonados por instância, ver constructor) — usado pra
+  // deixar o personagem semi-transparente durante invisibilidade.
+  private meshMaterials: THREE.Material[] = [];
 
   constructor(modelUrl: string, tintColor?: string) {
     Promise.all([loadCharacterTemplate(modelUrl), loadAnimationLibrary()]).then(([{ scene }, clips]) => {
@@ -70,12 +73,15 @@ export class CharacterModel {
         if (!(obj instanceof THREE.Mesh)) return;
         obj.castShadow = true;
         obj.receiveShadow = true;
-        if (tintColor && obj.material instanceof THREE.MeshStandardMaterial && obj.material.name.startsWith(TINTABLE_MATERIAL_PREFIX)) {
-          // Clona o material antes de tingir — ele é compartilhado entre
-          // todo mundo usando o mesmo corpo (macho/fêmea); sem clonar, a cor
-          // de um personagem vazaria pra todos os outros com o mesmo corpo.
+        // Clona o material antes de mexer nele — ele é compartilhado entre
+        // todo mundo usando o mesmo corpo (macho/fêmea); sem clonar, tingir
+        // ou deixar transparente um personagem vazaria pra todos os outros.
+        if (obj.material instanceof THREE.MeshStandardMaterial) {
           obj.material = obj.material.clone();
-          obj.material.color.set(tintColor);
+          if (tintColor && obj.material.name.startsWith(TINTABLE_MATERIAL_PREFIX)) {
+            obj.material.color.set(tintColor);
+          }
+          this.meshMaterials.push(obj.material);
         }
       });
       this.group.add(instance);
@@ -90,6 +96,15 @@ export class CharacterModel {
   // seguindo o soco/chute. Vazio até o modelo terminar de carregar.
   getHandWorldPositions(): THREE.Vector3[] {
     return this.handBones.map((bone) => bone.getWorldPosition(new THREE.Vector3()));
+  }
+
+  // opacity < 1 usa pra invisibilidade (ver Passo Fantasma) — liga
+  // `transparent` junto, senão o material ignora a opacidade.
+  setOpacity(opacity: number) {
+    for (const material of this.meshMaterials) {
+      material.opacity = opacity;
+      material.transparent = opacity < 1;
+    }
   }
 
   play(name: string) {

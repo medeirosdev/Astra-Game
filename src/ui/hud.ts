@@ -2,6 +2,8 @@ import type { AbilityRuntime } from "../game/AbilityRuntime";
 import { ABILITIES } from "../abilities/abilities";
 import type { CharacterDef } from "../characters/types";
 import { LOCAL_SCORE_KEY, type MatchState } from "../game/match";
+import type { SurvivalState } from "../game/survival";
+import { MOB_TYPES } from "../game/mobs";
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.ceil(ms / 1000);
@@ -23,6 +25,9 @@ export class Hud {
   private readonly deathOverlayEl: HTMLDivElement;
   private readonly endScreenEl: HTMLDivElement;
   private readonly damageFlashEl: HTMLDivElement;
+  private readonly waveEl: HTMLDivElement;
+  private readonly bossBarEl: HTMLDivElement;
+  private readonly bossBarFillEl: HTMLDivElement;
 
   constructor(container: HTMLElement, character: CharacterDef) {
     this.root = document.createElement("div");
@@ -100,6 +105,15 @@ export class Hud {
     this.damageFlashEl = document.createElement("div");
     this.damageFlashEl.className = "damage-flash";
 
+    this.waveEl = document.createElement("div");
+    this.waveEl.className = "wave-info";
+
+    this.bossBarFillEl = document.createElement("div");
+    this.bossBarFillEl.className = "bar-fill boss";
+    this.bossBarEl = document.createElement("div");
+    this.bossBarEl.className = "boss-bar";
+    this.bossBarEl.appendChild(this.bossBarFillEl);
+
     this.root.append(
       bars,
       slots,
@@ -109,6 +123,8 @@ export class Hud {
       this.deathOverlayEl,
       this.endScreenEl,
       this.damageFlashEl,
+      this.waveEl,
+      this.bossBarEl,
     );
     container.appendChild(this.root);
     this.setPeerCount(0);
@@ -194,5 +210,33 @@ export class Hud {
     result.textContent = resultText;
     this.endScreenEl.append(title, result);
     this.endScreenEl.style.display = "flex";
+  }
+
+  updateSurvival(state: SurvivalState) {
+    if (state.phase === "victory") {
+      this.waveEl.style.display = "none";
+      this.bossBarEl.style.display = "none";
+      this.endScreenEl.replaceChildren();
+      const title = document.createElement("h2");
+      title.textContent = "Vitória!";
+      const result = document.createElement("p");
+      result.textContent = "O chefe caiu. Vocês sobreviveram.";
+      this.endScreenEl.append(title, result);
+      this.endScreenEl.style.display = "flex";
+      return;
+    }
+    this.endScreenEl.style.display = "none";
+
+    const waveLabel = state.wave < 0 ? "Preparando..." : `Onda ${state.wave + 1} de ${state.totalWaves}`;
+    this.waveEl.textContent = state.phase === "resting" ? `${waveLabel} — próxima onda chegando...` : waveLabel;
+    this.waveEl.style.display = "block";
+
+    const boss = state.isBossWave ? state.mobs.find((m) => MOB_TYPES[m.typeId]?.isBoss && m.alive) : undefined;
+    if (boss) {
+      this.bossBarEl.style.display = "block";
+      this.bossBarFillEl.style.width = `${Math.max(0, (boss.health / boss.maxHealth) * 100)}%`;
+    } else {
+      this.bossBarEl.style.display = "none";
+    }
   }
 }
