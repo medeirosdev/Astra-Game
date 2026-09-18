@@ -1,4 +1,23 @@
-character-j.glb, character-l.glb, character-q.glb, Textures/texture-j.png, Textures/texture-l.png, Textures/texture-q.png
+superhero-male.glb, superhero-female.glb, anim-library-1.glb, anim-library-2.glb
 
-From Kenney's "Blocky Characters" pack (kenney.nl/assets/blocky-characters).
-License: CC0 (public domain) — no attribution required, credited here anyway.
+From Quaternius's "Universal Base Characters" (Standard/free tier), "Universal
+Animation Library" and "Universal Animation Library 2" (quaternius.com /
+quaternius.itch.io).
+License: CC0 1.0 Universal (public domain) — no attribution required, credited here anyway.
+
+Character meshes and both animation libraries share the same 65-bone skeleton, so
+animation clips from anim-library-1.glb and anim-library-2.glb are applied directly
+(via THREE.AnimationMixer) onto both superhero-male.glb and superhero-female.glb
+without any retargeting step — verified by rendering every clip used in the game and
+checking the pose didn't break. Library 1 has the base moveset (idle/walk/sprint/
+jump/crouch/roll/punch); library 2 supplies the extra per-character combo hits
+(Melee_Hook, OverhandThrow, Sword_Regular_A, ver characters.ts).
+
+Original files (Superhero_Male_FullBody.gltf, Superhero_Female_FullBody.gltf) were
+converted from separate .gltf+.bin+textures to self-contained .glb via
+`gltf-pipeline -b`, and their 2048x2048 textures were downscaled to 512x512 (PIL)
+to keep download size reasonable for a browser game — original textures were much
+higher resolution than this project's simple lighting setup needs.
+
+Replaces the earlier Kenney "Blocky Characters" models (character-j/l/q.glb) to
+get crouch/jump/roll animations, which that pack didn't include.

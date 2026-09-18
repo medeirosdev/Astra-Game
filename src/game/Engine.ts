@@ -9,6 +9,8 @@ import { AbilityRuntime } from "./AbilityRuntime";
 import { CharacterModel } from "./CharacterModel";
 import { pickMapPreset, type MapPreset } from "./mapPresets";
 import { playSound } from "./sound";
+import { createParticleRenderer, spawnParticleBurst, spawnShockwaveRing } from "./particles";
+import type { BatchedRenderer } from "three.quarks";
 
 const GRID_SIZE = 240; // 10x o tamanho original (24), a pedido
 const BLOCK_SIZE = 1;
@@ -17,8 +19,8 @@ const BLOCK_SIZE = 1;
 // jogo a ~2fps (medido). Com blocos de 3 unidades vira 6400, tranquilo.
 const GROUND_BLOCK_SIZE = 3;
 const UP = new THREE.Vector3(0, 1, 0);
-const CAMERA_DISTANCE = 11;
-const CAMERA_HEIGHT = 2;
+const CAMERA_DISTANCE = 7;
+const CAMERA_HEIGHT = 1.6;
 const MIN_PITCH = -0.2;
 const MAX_PITCH = 1.3;
 const MOUSE_SENSITIVITY = 0.0025;
@@ -30,11 +32,32 @@ const OBSTACLE_COUNT = 140;
 const OBSTACLE_CLEAR_RADIUS = 8; // sem obstáculo em cima do spawn
 const OBSTACLE_MELEE_REACH = 3; // mesmo alcance corpo-a-corpo usado contra jogadores (ver combat.ts)
 
+const GRAVITY = 22; // unidades/s² — só afeta o pulo, não é física de verdade
+const JUMP_SPEED = 8; // velocidade vertical inicial do pulo
+const CROUCH_SPEED_FACTOR = 0.5;
+const ROLL_DISTANCE = 5; // unidades percorridas durante o rolamento
+const ROLL_DURATION_MS = 400;
+// A animação "Roll" dura ~1.47s de propósito lento (pra ficar clara isolada);
+// acelerada 3.7x ela cabe nos 400ms do dash real, sem precisar de outro clipe.
+const ROLL_TIME_SCALE = 3.7;
+const ROLL_COOLDOWN_MS = 700;
+
+// Quanto tempo depois de um soco/reação o loop de movimento fica proibido
+// de trocar de volta pra idle/walk por cima — sem isso a pose mal aparecia
+// (updateMovement roda todo frame e cortava a animação quase na hora).
+const ATTACK_ACTION_LOCK_MS = 260;
+const HIT_REACTION_LOCK_MS = 300;
+// Janela em que updateAttackTrail amostra a posição das mãos pra desenhar o
+// rastro do soco/chute, e de quanto em quanto tempo.
+const ATTACK_TRAIL_WINDOW_MS = 220;
+const TRAIL_SAMPLE_INTERVAL_MS = 35;
+
 interface Projectile {
   mesh: THREE.Mesh;
   velocity: THREE.Vector3;
   bornAt: number;
   damage: number | null;
+  vfx: Ability["vfx"];
 }
 
 interface Obstacle {
@@ -64,10 +87,10 @@ export interface Transform {
 }
 
 // "instant" é corpo a corpo (soco/golpe); o resto (projétil, área, self) usa
-// a pose de "atirar/canalizar" — não tem uma animação dedicada de conjurar
-// magia nesse pacote, essa é a mais próxima disso.
+// a pose de conjurar magia (ver public/models/CREDITS.txt) — mesma lógica
+// de antes, só trocou o nome do clipe pro pack novo.
 function attackAnimationFor(ability: Ability): string {
-  return ability.target.kind === "instant" ? "attack-melee-right" : "holding-right-shoot";
+  return ability.target.kind === "instant" ? "Punch_Cross" : "Spell_Simple_Shoot";
 }
 
 export class Engine {
@@ -83,10 +106,29 @@ export class Engine {
   private readonly obstacles: Obstacle[] = [];
   private readonly remotePlayers = new Map<string, RemotePlayer>();
   private readonly sun: THREE.DirectionalLight;
+  private readonly particleRenderer: BatchedRenderer;
   private readonly moveSpeed: number;
+  private readonly comboAnims: string[];
   private yaw = 0;
   private pitch = 0.5;
   private frozen = false;
+  private comboIndex = 0;
+  private shakeStartedAt = 0;
+  private shakeDurationMs = 0;
+  private shakeStrength = 0;
+  private grounded = true;
+  private verticalVelocity = 0;
+  private crouching = false;
+  private rollUntil = 0;
+  private lastRollAt = -Infinity;
+  private readonly rollDirection = new THREE.Vector3();
+  // Enquanto now < isso, updateMovement não pisa em cima da animação atual
+  // com idle/walk/sprint — sem isso, um soco tocado via playOnce era cortado
+  // quase na hora pelo próprio loop de movimento no frame seguinte.
+  private actionLockUntil = 0;
+  private hitStopUntil = 0;
+  private attackTrailUntil = 0;
+  private lastTrailSampleAt = 0;
   readonly runtime: AbilityRuntime;
 
   private readonly onHudUpdate: (runtime: AbilityRuntime) => void;
@@ -96,6 +138,7 @@ export class Engine {
     this.onHudUpdate = onHudUpdate;
     this.runtime = new AbilityRuntime(character);
     this.moveSpeed = character.stats.moveSpeed;
+    this.comboAnims = character.comboAnims;
     this.map = pickMapPreset(roomCode);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -114,10 +157,13 @@ export class Engine {
     this.sun = this.setupLights();
     this.buildMap();
 
+    this.particleRenderer = createParticleRenderer();
+    this.scene.add(this.particleRenderer);
+
     this.player = new THREE.Group();
     this.player.position.copy(SPAWN_POINT);
     this.scene.add(this.player);
-    this.playerModel = new CharacterModel(character.modelUrl);
+    this.playerModel = new CharacterModel(character.modelUrl, character.color);
     this.player.add(this.playerModel.group);
 
     this.composer = new EffectComposer(this.renderer);
@@ -146,6 +192,9 @@ export class Engine {
     this.renderer.domElement.addEventListener("click", () => {
       this.renderer.domElement.requestPointerLock();
     });
+    // Botão direito é bloqueio (ver main.ts) — sem isso o navegador abriria
+    // o menu de contexto a cada tentativa de segurar a defesa.
+    this.renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
 
     document.addEventListener("pointerlockchange", () => {
       hint.style.display = document.pointerLockElement === this.renderer.domElement ? "none" : "block";
@@ -303,6 +352,8 @@ export class Engine {
       obstacle.mesh.geometry.dispose();
       obstacle.material.dispose();
       playSound("obstacleBreak");
+      spawnParticleBurst(this.scene, this.particleRenderer, "nova", obstacle.position, `#${obstacle.baseColor.getHexString()}`);
+      this.triggerShakeAt(obstacle.position, 0.35, 20, 220);
       return;
     }
     const t = obstacle.health / obstacle.maxHealth;
@@ -320,6 +371,11 @@ export class Engine {
     for (const obstacle of this.obstacles) {
       if (!obstacle.destroyed && obstacle.position.distanceTo(origin) <= reach + obstacle.radius) {
         this.damageObstacle(obstacle, ability.effect.amount);
+        // Cada peer roda esse cálculo do mesmo jeito (ver about.md — estado
+        // compartilhado, sem precisar de mensagem extra), então isso já dá
+        // o impacto físico certo tanto pro soco local quanto pra réplica do
+        // soco de um peer remoto acertando um obstáculo perto de mim.
+        if (ability.tier === "basic") this.triggerImpact(obstacle.position);
       }
     }
   }
@@ -343,6 +399,12 @@ export class Engine {
     this.player.visible = !this.runtime.isDead(now);
     if (this.runtime.respawnIfReady(now)) {
       this.player.position.copy(SPAWN_POINT);
+      // Reseta estado de movimento — morrer no meio de um pulo/rolamento não
+      // pode deixar o respawn com física estranha (grudado no ar, etc).
+      this.grounded = true;
+      this.verticalVelocity = 0;
+      this.crouching = false;
+      this.rollUntil = 0;
     }
   }
 
@@ -358,6 +420,20 @@ export class Engine {
 
     this.player.rotation.y = this.yaw;
 
+    // Rolamento tem prioridade sobre tudo — ignora WASD normal enquanto dura.
+    if (now < this.rollUntil) {
+      const step = (ROLL_DISTANCE / (ROLL_DURATION_MS / 1000)) * dt;
+      this.player.position.addScaledVector(this.rollDirection, step);
+      this.clampToArena(this.player.position);
+      this.updateCamera();
+      return;
+    }
+
+    this.updateVerticalMotion(dt);
+    // Agachar é só segurar "c" — sem estado separado pra manter, igual o
+    // WASD (this.keys já é atualizado pelo listener de teclado do Engine).
+    this.crouching = this.grounded && this.keys.has("c");
+
     let moved = false;
     if (!this.runtime.isStunned(now)) {
       const forward = this.forward();
@@ -369,17 +445,121 @@ export class Engine {
       if (this.keys.has("d")) move.add(right);
       if (move.lengthSq() > 0) {
         const speedFactor = this.runtime.getSpeedFactor(now);
-        const speed = this.moveSpeed * speedFactor;
+        // Segurando o bloqueio anda bem mais devagar — trade-off tático
+        // (não dá pra correr pra trás bloqueando sem perder terreno).
+        const blockFactor = this.runtime.isBlocking() ? 0.4 : 1;
+        const crouchFactor = this.crouching ? CROUCH_SPEED_FACTOR : 1;
+        const speed = this.moveSpeed * speedFactor * blockFactor * crouchFactor;
         move.normalize().multiplyScalar(speed * dt);
         this.player.position.add(move);
         this.clampToArena(this.player.position);
-        this.playerModel.play(speedFactor > 1 ? "sprint" : "walk");
+        // No ar deixa o Jump_Loop tocando — WASD ainda desloca, só não pisa
+        // por cima da pose de pulo com a de andar. actionLockUntil segura o
+        // mesmo tipo de pisada em cima de um soco/reação em andamento.
+        if (this.grounded && now >= this.actionLockUntil) {
+          this.playerModel.play(this.crouching ? "Crouch_Fwd_Loop" : speedFactor > 1 ? "Sprint_Loop" : "Walk_Loop");
+        }
         moved = true;
       }
     }
-    if (!moved) this.playerModel.play("idle");
+    if (!moved && this.grounded && now >= this.actionLockUntil) {
+      this.playerModel.play(this.crouching ? "Crouch_Idle_Loop" : this.runtime.isBlocking() ? "Sword_Idle" : "Idle_Loop");
+    }
 
     this.updateCamera();
+  }
+
+  private updateVerticalMotion(dt: number) {
+    if (this.grounded) return;
+    this.verticalVelocity -= GRAVITY * dt;
+    const nextY = this.player.position.y + this.verticalVelocity * dt;
+    if (nextY <= 0) {
+      this.player.position.y = 0;
+      this.grounded = true;
+      this.verticalVelocity = 0;
+      this.playerModel.playOnce("Jump_Land", "Idle_Loop");
+    } else {
+      this.player.position.y = nextY;
+    }
+  }
+
+  // Só pula do chão, com defesa erguida ou agachado — evita pulo-duplo e
+  // fica mais claro qual estado "cancela" qual.
+  tryJump(): boolean {
+    if (!this.grounded || this.crouching) return false;
+    this.grounded = false;
+    this.verticalVelocity = JUMP_SPEED;
+    this.playerModel.playOnce("Jump_Start", "Jump_Loop");
+    return true;
+  }
+
+  // Dash rápido pra frente com invencibilidade breve (ver AbilityRuntime) —
+  // só do chão, com cooldown próprio pra não virar spam de i-frame.
+  tryRoll(): boolean {
+    const now = performance.now();
+    if (!this.grounded || now - this.lastRollAt < ROLL_COOLDOWN_MS) return false;
+    this.lastRollAt = now;
+    this.rollUntil = now + ROLL_DURATION_MS;
+    this.rollDirection.copy(this.forward());
+    this.crouching = false;
+    this.runtime.setInvulnerable(ROLL_DURATION_MS, now);
+    this.playerModel.playOnce("Roll", "Idle_Loop", ROLL_TIME_SCALE);
+    return true;
+  }
+
+  // Sacode a câmera por um instante — usado em impactos grandes (área,
+  // destruição de obstáculo) pra dar peso, além das partículas/luz.
+  triggerShake(strength: number, durationMs: number) {
+    this.shakeStartedAt = performance.now();
+    this.shakeDurationMs = durationMs;
+    this.shakeStrength = strength;
+  }
+
+  // Mesma coisa, mas enfraquece com a distância até o jogador local — uma
+  // área/obstáculo destruído do outro lado do mapa (240x240) não devia
+  // sacudir a câmera de quem nem viu.
+  private triggerShakeAt(worldPos: THREE.Vector3, baseStrength: number, falloffRadius: number, durationMs: number) {
+    const dist = worldPos.distanceTo(this.player.position);
+    const falloff = Math.max(0, 1 - dist / falloffRadius);
+    if (falloff > 0) this.triggerShake(baseStrength * falloff, durationMs);
+  }
+
+  // Congela o jogo quase por completo por um instante — clássico "hit-stop"
+  // de jogo de luta, dá peso ao golpe conectar. Não é zero cravado (evita
+  // dt=0 estranho em qualquer coisa que divida por ele); é só bem lento.
+  private triggerHitStop(durationMs: number) {
+    this.hitStopUntil = performance.now() + durationMs;
+  }
+
+  // Poeira física + tremor de câmera + hit-stop no ponto exato do acerto —
+  // só quando um golpe conecta de verdade (não em todo swing). Cor neutra
+  // fixa de propósito: soco não é mágico, não usa a cor da habilidade.
+  triggerImpact(at: { x: number; y: number; z: number }) {
+    const worldPos = new THREE.Vector3(at.x, at.y, at.z);
+    spawnParticleBurst(this.scene, this.particleRenderer, "punchImpact", worldPos, "#d8cdb8");
+    this.triggerShakeAt(worldPos, 0.22, 6, 130);
+    this.triggerHitStop(65);
+  }
+
+  // Empurra o jogador local pra longe de quem bateu — resolvido no lado de
+  // quem apanhou, igual dano (ver combat.ts/AbilityRuntime, "quem recebe decide").
+  applyKnockback(fromOrigin: { x: number; y: number; z: number }, distance: number) {
+    const dir = new THREE.Vector3(this.player.position.x - fromOrigin.x, 0, this.player.position.z - fromOrigin.z);
+    if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1);
+    dir.normalize();
+    this.player.position.addScaledVector(dir, distance);
+    this.clampToArena(this.player.position);
+  }
+
+  // Tropeço breve de quem apanhou — chamado tanto pro jogador local quanto
+  // (via playRemoteAnimation-like path) pra peers remotos.
+  playLocalHitReaction() {
+    this.playerModel.playOnce("Hit_Chest", "Idle_Loop");
+    this.actionLockUntil = Math.max(this.actionLockUntil, performance.now() + HIT_REACTION_LOCK_MS);
+  }
+
+  playRemoteHitReaction(peerId: string) {
+    this.remotePlayers.get(peerId)?.model?.playOnce("Hit_Chest", "Idle_Loop");
   }
 
   private updateCamera() {
@@ -391,8 +571,21 @@ export class Engine {
       this.player.position.y + offsetY,
       this.player.position.z + offsetZ,
     );
+
+    const shakeT = this.shakeDurationMs > 0 ? (performance.now() - this.shakeStartedAt) / this.shakeDurationMs : 1;
+    if (shakeT < 1) {
+      const amp = this.shakeStrength * (1 - shakeT);
+      desired.x += (Math.random() - 0.5) * amp;
+      desired.y += (Math.random() - 0.5) * amp;
+      desired.z += (Math.random() - 0.5) * amp;
+    }
+
     this.camera.position.lerp(desired, 0.2);
     this.camera.lookAt(this.player.position.x, this.player.position.y + 1, this.player.position.z);
+  }
+
+  isPointerLocked(): boolean {
+    return document.pointerLockElement === this.renderer.domElement;
   }
 
   getLocalTransform(): Transform {
@@ -421,7 +614,7 @@ export class Engine {
     this.remotePlayers.set(peerId, { group, placeholder, model: null, target: group.position.clone(), yaw: 0 });
   }
 
-  setRemotePlayerCharacter(peerId: string, modelUrl: string) {
+  setRemotePlayerCharacter(peerId: string, modelUrl: string, tintColor: string) {
     const remote = this.remotePlayers.get(peerId);
     if (!remote || remote.model) return;
     if (remote.placeholder) {
@@ -430,7 +623,7 @@ export class Engine {
       (remote.placeholder.material as THREE.Material).dispose();
       remote.placeholder = null;
     }
-    remote.model = new CharacterModel(modelUrl);
+    remote.model = new CharacterModel(modelUrl, tintColor);
     remote.group.add(remote.model.group);
   }
 
@@ -442,8 +635,11 @@ export class Engine {
     remote.group.visible = transform.alive;
   }
 
-  playRemoteAnimation(peerId: string, ability: Ability) {
-    this.remotePlayers.get(peerId)?.model?.playOnce(attackAnimationFor(ability), "idle");
+  // `anim` sobrescreve a animação padrão — usado pelo soco básico, cujo
+  // clipe alterna em combo (ver COMBO_ANIMS) e por isso vem no payload de
+  // rede em vez de ser derivado só do ability.id.
+  playRemoteAnimation(peerId: string, ability: Ability, anim?: string) {
+    this.remotePlayers.get(peerId)?.model?.playOnce(anim ?? attackAnimationFor(ability), "Idle_Loop");
   }
 
   removeRemotePlayer(peerId: string) {
@@ -465,13 +661,27 @@ export class Engine {
       remote.group.rotation.y = remote.yaw;
       remote.model?.update(dt);
       const moved = remote.group.position.distanceTo(before) > MOVING_THRESHOLD;
-      remote.model?.play(moved ? "walk" : "idle");
+      remote.model?.play(moved ? "Walk_Loop" : "Idle_Loop");
     }
   }
 
-  castAbility(ability: Ability) {
+  // Retorna a animação usada — quem chama (main.ts) manda ela junto no cast
+  // de rede pros peers reproduzirem o mesmo clipe (importante pro combo do
+  // soco básico, que não dá pra derivar só do ability.id).
+  castAbility(ability: Ability): string {
     this.castAbilityAt(ability, this.player.position, this.yaw);
-    this.playerModel.playOnce(attackAnimationFor(ability), "idle");
+    const anim = ability.tier === "basic" ? this.comboAnims[this.comboIndex++ % this.comboAnims.length] : attackAnimationFor(ability);
+    this.playerModel.playOnce(anim, "Idle_Loop");
+    // Segura o loop de movimento de trocar a pose de volta antes da hora
+    // (ele roda todo frame) e, pro soco básico, abre a janela do rastro.
+    const now = performance.now();
+    this.actionLockUntil = Math.max(this.actionLockUntil, now + ATTACK_ACTION_LOCK_MS);
+    if (ability.tier === "basic") this.attackTrailUntil = now + ATTACK_TRAIL_WINDOW_MS;
+    if (ability.lunge) {
+      this.player.position.addScaledVector(this.forward(), ability.lunge);
+      this.clampToArena(this.player.position);
+    }
+    return anim;
   }
 
   castAbilityAt(ability: Ability, origin: { x: number; y: number; z: number }, yaw = 0) {
@@ -490,15 +700,28 @@ export class Engine {
       const velocity = forward.clone().multiplyScalar(ability.target.speed);
       this.scene.add(mesh);
       const damage = ability.effect.kind === "damage" ? ability.effect.amount : null;
-      this.projectiles.push({ mesh, velocity, bornAt: performance.now(), damage });
+      this.projectiles.push({ mesh, velocity, bornAt: performance.now(), damage, vfx: ability.vfx });
+      // "boca" do disparo — o rastro em voo já é o mesh brilhante acima.
+      spawnParticleBurst(this.scene, this.particleRenderer, ability.vfx.particle, mesh.position, ability.vfx.color);
     }
-    // area / instant / self: efeito visual simples por enquanto (flash na cor do vfx).
+    // area / instant / self: flash de luz + partículas — só pra poderes de
+    // verdade. Soco básico ("basic") é ataque físico, não mágico, e não
+    // ganha VFX nenhum aqui (só a animação de soco/golpe já cuida disso).
     if (ability.target.kind !== "projectile") {
-      const light = new THREE.PointLight(ability.vfx.color, 4, 6);
-      light.position.copy(originVec).add(new THREE.Vector3(0, 1, 0));
-      this.scene.add(light);
-      setTimeout(() => this.scene.remove(light), 200);
+      if (ability.tier !== "basic") {
+        const light = new THREE.PointLight(ability.vfx.color, 4, 6);
+        light.position.copy(originVec).add(new THREE.Vector3(0, 1, 0));
+        this.scene.add(light);
+        setTimeout(() => this.scene.remove(light), 200);
+        spawnParticleBurst(this.scene, this.particleRenderer, ability.vfx.particle, light.position, ability.vfx.color);
+      }
       this.resolveObstacleHits(ability, originVec);
+    }
+    // Área: anel de onda de choque cobrindo o raio real do dano + tremor de
+    // câmera — poder de área devia SENTIR grande, não só ter luz piscando.
+    if (ability.target.kind === "area") {
+      spawnShockwaveRing(this.scene, originVec, ability.target.radius, ability.vfx.color);
+      this.triggerShakeAt(originVec, Math.min(0.6, ability.target.radius * 0.05), ability.target.radius * 4, 260);
     }
   }
 
@@ -521,6 +744,7 @@ export class Engine {
         );
         if (hit) {
           this.damageObstacle(hit, p.damage);
+          spawnParticleBurst(this.scene, this.particleRenderer, p.vfx.particle, p.mesh.position, p.vfx.color);
           this.removeProjectile(i);
           continue;
         }
@@ -532,14 +756,33 @@ export class Engine {
     }
   }
 
+  // Enquanto a janela do rastro (ver castAbility) tá aberta, marca a
+  // posição das mãos de tempos em tempos — cada marca é uma partícula
+  // pequena e quase parada, juntas formam o "afterimage" do golpe.
+  private updateAttackTrail() {
+    const now = performance.now();
+    if (now >= this.attackTrailUntil) return;
+    if (now - this.lastTrailSampleAt < TRAIL_SAMPLE_INTERVAL_MS) return;
+    this.lastTrailSampleAt = now;
+    for (const pos of this.playerModel.getHandWorldPositions()) {
+      spawnParticleBurst(this.scene, this.particleRenderer, "swipeTrail", pos, "#fff3e0");
+    }
+  }
+
   start() {
     const loop = () => {
-      const dt = Math.min(this.clock.getDelta(), 0.1);
+      let dt = Math.min(this.clock.getDelta(), 0.1);
+      // Hit-stop: quase congela por um instante no momento do impacto (ver
+      // triggerImpact) — não zera de vez pra não ter dt=0 estranho em
+      // qualquer lugar que divida por ele.
+      if (performance.now() < this.hitStopUntil) dt *= 0.06;
       this.runtime.update(dt);
       this.updateMovement(dt);
       this.updateSun();
       this.updateProjectiles(dt);
       this.updateRemotePlayers(dt);
+      this.updateAttackTrail();
+      this.particleRenderer.update(dt);
       this.onHudUpdate(this.runtime);
       this.composer.render();
       requestAnimationFrame(loop);

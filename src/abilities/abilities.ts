@@ -81,7 +81,7 @@ export const ABILITIES = {
     cooldownMs: 4000,
     target: { kind: "instant" },
     effect: { kind: "stun", durationMs: 700 },
-    vfx: { color: "#f7ff5c", particle: "spark", sound: "zap" },
+    vfx: { color: "#f7ff5c", particle: "lightning", sound: "zap" },
   },
   investidaFeroz: {
     id: "investidaFeroz",
@@ -182,6 +182,46 @@ export const ABILITIES = {
     target: { kind: "area", radius: 12 },
     effect: { kind: "damage", amount: 100 },
     vfx: { color: "#7b5cff", particle: "nova", sound: "boom" },
+  },
+
+  // Socos do botão esquerdo do mouse — uma receita por personagem (ver
+  // CharacterDef.basicAttackId), custo 0, fora dos 5 slots. cooldownMs aqui
+  // é o ritmo do combo: mais baixo = socos mais rápidos.
+  testadorSoco: {
+    id: "testadorSoco",
+    name: "Soco",
+    tier: "basic",
+    cost: 0,
+    cooldownMs: 380,
+    target: { kind: "instant" },
+    effect: { kind: "damage", amount: 9 },
+    lunge: 1.2,
+    knockback: 1,
+    vfx: { color: "#ffffff", particle: "spark", sound: "hit" },
+  },
+  guardiaoSoco: {
+    id: "guardiaoSoco",
+    name: "Golpe",
+    tier: "basic",
+    cost: 0,
+    cooldownMs: 650,
+    target: { kind: "instant" },
+    effect: { kind: "damage", amount: 15 },
+    lunge: 0.8,
+    knockback: 2, // mais lento, mas o golpe pesa — empurra mais longe
+    vfx: { color: "#ffffff", particle: "shock", sound: "hit" },
+  },
+  senseiSoco: {
+    id: "senseiSoco",
+    name: "Toque",
+    tier: "basic",
+    cost: 0,
+    cooldownMs: 260,
+    target: { kind: "instant" },
+    effect: { kind: "damage", amount: 6 },
+    lunge: 1.6,
+    knockback: 0.5, // socos rápidos e fracos, mal empurram
+    vfx: { color: "#7b5cff", particle: "spark", sound: "hit" },
   },
 } satisfies Record<string, Ability>;
 

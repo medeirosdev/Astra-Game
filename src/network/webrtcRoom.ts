@@ -17,6 +17,11 @@ export interface WebrtcRoom {
   onPeerLeave(fn: (peerId: string) => void): void;
   makeAction<T>(namespace: string): [(data: T, targetPeerId?: string) => void, (handler: (data: T, peerId: string) => void) => void];
   getPeers(): Record<string, RTCPeerConnection>;
+  // ID que o servidor de sinalização atribuiu a mim nessa sala — null até o
+  // "joined" chegar. Usado pra distinguir "esse hit foi em mim" de "foi em
+  // outro peer" quando a rede espalha um evento pra todo mundo (ver
+  // main.ts, feedback de acerto de soco).
+  getSelfId(): string | null;
 }
 
 // Sala P2P de verdade: o servidor de sinalização só serve pra trocar
@@ -28,6 +33,10 @@ export function connectSignalingRoom(url: string, roomCode: string): WebrtcRoom 
   const signal = new SignalClient(url, roomCode);
   const peers = new Map<string, PeerLink>();
   const handlersByNs = new Map<string, ActionHandler[]>();
+  let selfId: string | null = null;
+  signal.onJoined = (id) => {
+    selfId = id;
+  };
 
   let joinListener: (peerId: string) => void = () => {};
   let leaveListener: (peerId: string) => void = () => {};
@@ -154,5 +163,6 @@ export function connectSignalingRoom(url: string, roomCode: string): WebrtcRoom 
       for (const [id, link] of peers) result[id] = link.pc;
       return result;
     },
+    getSelfId: () => selfId,
   };
 }

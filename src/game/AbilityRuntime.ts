@@ -19,21 +19,33 @@ const RESPAWN_DELAY_MS = 3000;
 export class AbilityRuntime {
   health: number;
   energy: number;
+  guard: number;
   readonly maxHealth: number;
   readonly maxEnergy: number;
+  readonly maxGuard: number;
   private readonly regenPerSec: number;
+  private readonly guardRegenPerSec: number;
   private cooldownUntil = new Map<AbilityId, number>();
   private stunnedUntil = 0;
   private speedFactor = 1;
   private speedFactorUntil = 0;
   private deadUntil = 0;
+  // Segurando o botão direito do mouse — não é o mesmo que "bloqueando de
+  // verdade" (ver isBlocking): guarda a 0 quebra a defesa mesmo segurando.
+  private blockHeld = false;
+  // Janela de i-frame do rolamento (ver Engine.tryRoll) — ignora qualquer
+  // efeito recebido, não só dano.
+  private invulnerableUntil = 0;
 
   constructor(private readonly character: CharacterDef) {
     this.health = character.stats.health;
     this.energy = character.stats.energy;
+    this.guard = character.stats.guard;
     this.maxHealth = character.stats.health;
     this.maxEnergy = character.stats.energy;
+    this.maxGuard = character.stats.guard;
     this.regenPerSec = character.stats.energyRegenPerSec;
+    this.guardRegenPerSec = character.stats.guardRegenPerSec;
   }
 
   get slots(): { key: string; abilityId: AbilityId }[] {
@@ -49,6 +61,29 @@ export class AbilityRuntime {
 
   update(dtSeconds: number) {
     this.energy = Math.min(this.maxEnergy, this.energy + this.regenPerSec * dtSeconds);
+    // Só regenera guarda com o botão solto — segurar bloqueio depois que a
+    // guarda quebrou não deixa ela voltar, tem que soltar pra recuperar.
+    if (!this.blockHeld) {
+      this.guard = Math.min(this.maxGuard, this.guard + this.guardRegenPerSec * dtSeconds);
+    }
+  }
+
+  setBlocking(active: boolean) {
+    this.blockHeld = active;
+  }
+
+  // Bloqueando de verdade (segurando E com guarda de sobra) — guarda a 0
+  // quebra a defesa mesmo com o botão ainda pressionado.
+  isBlocking(): boolean {
+    return this.blockHeld && this.guard > 0;
+  }
+
+  setInvulnerable(durationMs: number, now: number) {
+    this.invulnerableUntil = Math.max(this.invulnerableUntil, now + durationMs);
+  }
+
+  isInvulnerable(now: number): boolean {
+    return now < this.invulnerableUntil;
   }
 
   canCast(abilityId: AbilityId, now: number): boolean {
@@ -72,11 +107,18 @@ export class AbilityRuntime {
 
   applyEffect(effect: AbilityEffect, now: number) {
     if (this.isDead(now)) return;
+    if (effect.kind !== "heal" && this.isInvulnerable(now)) return;
     switch (effect.kind) {
-      case "damage":
-        this.health = Math.max(0, this.health - effect.amount);
+      case "damage": {
+        // Bloqueando: o dano consome a guarda primeiro; o que sobrar (guarda
+        // quebrou no meio do golpe) vaza pra vida, igual dano normal.
+        const toGuard = this.isBlocking() ? Math.min(this.guard, effect.amount) : 0;
+        this.guard -= toGuard;
+        const toHealth = effect.amount - toGuard;
+        this.health = Math.max(0, this.health - toHealth);
         if (this.health === 0) this.deadUntil = now + RESPAWN_DELAY_MS;
         break;
+      }
       case "heal":
         this.health = Math.min(this.maxHealth, this.health + effect.amount);
         break;
@@ -117,6 +159,9 @@ export class AbilityRuntime {
     if (this.deadUntil === 0 || now < this.deadUntil) return false;
     this.health = this.maxHealth;
     this.energy = this.maxEnergy;
+    this.guard = this.maxGuard;
+    this.blockHeld = false;
+    this.invulnerableUntil = 0;
     this.deadUntil = 0;
     this.stunnedUntil = 0;
     this.speedFactorUntil = 0;

@@ -70,7 +70,7 @@ body {
   flex-direction: column;
   align-items: stretch;
   gap: 12px;
-  width: 280px;
+  width: 380px;
   text-align: center;
 }
 
@@ -103,9 +103,9 @@ body {
 
 .character-picker {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .character-card {
@@ -113,26 +113,58 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 10px 14px !important;
+  gap: 8px;
+  padding: 16px 10px 14px !important;
   background: rgba(10, 10, 18, 0.6) !important;
   border: 2px solid #333a52;
-  border-radius: 8px;
-  color: #eef2ff;
-  font-size: 12px;
+  border-radius: 12px;
+  color: #eef2ff !important;
   font-weight: 500 !important;
   cursor: pointer;
+  flex: 1;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
 }
 
-.character-card:hover { border-color: var(--character-color); }
-.character-card.selected { border-color: var(--character-color); background: rgba(255, 255, 255, 0.06) !important; }
+.character-card:hover {
+  border-color: var(--character-color);
+  transform: translateY(-3px);
+}
+.character-card.selected {
+  border-color: var(--character-color);
+  background: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 0 18px -4px var(--character-color);
+}
 
-.character-card .dot {
-  width: 22px;
-  height: 22px;
+.character-card .badge {
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: var(--character-color);
-  box-shadow: 0 0 12px var(--character-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--character-color);
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--character-color) 35%, transparent), rgba(10, 10, 18, 0.4));
+  border: 1px solid color-mix(in srgb, var(--character-color) 60%, transparent);
+  box-shadow: 0 0 16px -2px var(--character-color);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.character-card .badge svg { width: 28px; height: 28px; }
+.character-card:hover .badge,
+.character-card.selected .badge {
+  box-shadow: 0 0 24px 0 var(--character-color);
+  transform: scale(1.06);
+}
+
+.character-card .char-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.character-card .char-tagline {
+  font-size: 11px;
+  opacity: 0.65;
+  font-weight: 500;
 }
 
 .menu-divider { opacity: 0.5; font-size: 12px; }
@@ -194,6 +226,12 @@ body {
 .bar-fill { height: 100%; transition: width 0.15s ease; }
 .bar-fill.health { background: #ff5c5c; }
 .bar-fill.energy { background: #4fa3ff; }
+.bar-fill.guard { background: #9ad1ff; }
+
+/* Barra de defesa some quando cheia e sem uso, pra não poluir o HUD — só
+   ganha destaque (borda brilhando) enquanto o bloqueio está ativo. */
+.bar-guard { height: 8px; opacity: 0.55; transition: opacity 0.15s ease, box-shadow 0.15s ease; }
+.bar-guard.active { opacity: 1; box-shadow: 0 0 10px 1px rgba(154, 209, 255, 0.7); }
 
 .hud-slots { display: flex; gap: 10px; }
 
@@ -320,4 +358,23 @@ body {
 .end-screen p {
   font-size: 18px;
   margin: 0;
+}
+
+/* Pulso vermelho quando o jogador local apanha (ver Hud.flashDamage) —
+   vinheta nas bordas, não cobre o centro pra não atrapalhar a mira. */
+.damage-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(255, 40, 40, 0.35) 100%);
+}
+
+.damage-flash.active {
+  animation: damage-pulse 0.35s ease-out;
+}
+
+@keyframes damage-pulse {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
 }

@@ -14,6 +14,7 @@ export class Hud {
   private readonly root: HTMLDivElement;
   private readonly healthFill: HTMLDivElement;
   private readonly energyFill: HTMLDivElement;
+  private readonly guardFill: HTMLDivElement;
   private readonly slotEls: HTMLDivElement[] = [];
   private readonly cooldownEls: HTMLDivElement[] = [];
   private readonly peerCountEl: HTMLDivElement;
@@ -21,6 +22,7 @@ export class Hud {
   private readonly scoreboardEl: HTMLDivElement;
   private readonly deathOverlayEl: HTMLDivElement;
   private readonly endScreenEl: HTMLDivElement;
+  private readonly damageFlashEl: HTMLDivElement;
 
   constructor(container: HTMLElement, character: CharacterDef) {
     this.root = document.createElement("div");
@@ -40,7 +42,13 @@ export class Hud {
     energyBar.className = "bar";
     energyBar.appendChild(this.energyFill);
 
-    bars.append(healthBar, energyBar);
+    this.guardFill = document.createElement("div");
+    this.guardFill.className = "bar-fill guard";
+    const guardBar = document.createElement("div");
+    guardBar.className = "bar bar-guard";
+    guardBar.appendChild(this.guardFill);
+
+    bars.append(healthBar, energyBar, guardBar);
 
     const slots = document.createElement("div");
     slots.className = "hud-slots";
@@ -89,6 +97,9 @@ export class Hud {
     this.endScreenEl = document.createElement("div");
     this.endScreenEl.className = "end-screen";
 
+    this.damageFlashEl = document.createElement("div");
+    this.damageFlashEl.className = "damage-flash";
+
     this.root.append(
       bars,
       slots,
@@ -97,6 +108,7 @@ export class Hud {
       this.scoreboardEl,
       this.deathOverlayEl,
       this.endScreenEl,
+      this.damageFlashEl,
     );
     container.appendChild(this.root);
     this.setPeerCount(0);
@@ -106,11 +118,24 @@ export class Hud {
     this.peerCountEl.textContent = count === 0 ? "Sozinho na sala" : `${count} amigo(s) conectado(s)`;
   }
 
+  // Pulso vermelho na tela — chamado quando o jogador local apanha de um
+  // soco/golpe básico (ver main.ts). Reinicia a animação removendo e
+  // recolocando a classe, senão apanhar duas vezes rápido só reanima a
+  // primeira (CSS não reinicia uma animação já em andamento sozinho).
+  flashDamage() {
+    this.damageFlashEl.classList.remove("active");
+    void this.damageFlashEl.offsetWidth; // força reflow antes de reaplicar
+    this.damageFlashEl.classList.add("active");
+  }
+
   update(runtime: AbilityRuntime, now: number) {
     const healthPct = (Math.max(0, runtime.health) / runtime.maxHealth) * 100;
     const energyPct = (Math.max(0, runtime.energy) / runtime.maxEnergy) * 100;
+    const guardPct = (Math.max(0, runtime.guard) / runtime.maxGuard) * 100;
     this.healthFill.style.width = `${Math.min(100, healthPct)}%`;
     this.energyFill.style.width = `${Math.min(100, energyPct)}%`;
+    this.guardFill.style.width = `${Math.min(100, guardPct)}%`;
+    this.guardFill.parentElement?.classList.toggle("active", runtime.isBlocking());
 
     runtime.slots.forEach(({ abilityId }, i) => {
       const ability = ABILITIES[abilityId];
