@@ -130,6 +130,66 @@ export const CHARACTERS = {
     // soco — combina com o resto do kit ser tudo à distância.
     comboAnims: ["Pistol_Shoot", "Pistol_Shoot"],
   },
+  kaiman: {
+    id: "kaiman",
+    name: "Kaiman",
+    color: "#3ba24a",
+    modelUrl: "/models/superhero-male.glb",
+    outfitUrl: "/models/outfits/Male_Peasant.glb",
+    tagline: "Veneno e fúria gigante",
+    icon: "claw",
+    // Brigão reptiliano — veneno de perto e de longe (dano + lentidão) e um
+    // especial que de verdade vira gigante (maior escala do elenco, ver
+    // furiaDoLagartoGigante) em vez de só um buff de status.
+    stats: { health: 130, energy: 90, energyRegenPerSec: 7, moveSpeed: 5.3, guard: 110, guardRegenPerSec: 11 },
+    loadout: {
+      common: ["cuspeVenenoso", "pocaToxica"],
+      strong: ["mordidaBrutal", "caudaVenenosa"],
+      super: "furiaDoLagartoGigante",
+    },
+    basicAttackId: "kaimanGarra",
+    comboAnims: ["Melee_Hook", "Punch_Cross", "OverhandThrow"],
+  },
+  blaze: {
+    id: "blaze",
+    name: "Blaze",
+    color: "#ff4500",
+    modelUrl: "/models/superhero-male.glb",
+    outfitUrl: "/models/outfits/Male_Ranger.glb",
+    tagline: "Fogo em área e explosões",
+    icon: "flame",
+    // Controlador de fogo — piso em chamas e pilar são dano de área normal,
+    // mas Combustão Total é DE PROPÓSITO gigante (raio 45, muito maior que
+    // qualquer outra super do jogo, ver abilities.ts) — pedido explícito.
+    stats: { health: 90, energy: 115, energyRegenPerSec: 8, moveSpeed: 6, guard: 65, guardRegenPerSec: 13 },
+    loadout: {
+      common: ["rajadaDeFogo", "pisoEmChamas"],
+      strong: ["ondaDeCalor", "pilarDeFogo"],
+      super: "combustaoTotal",
+    },
+    basicAttackId: "blazeSoco",
+    comboAnims: ["Punch_Jab", "Punch_Cross", "Melee_Hook"],
+  },
+  charutoUzumaki: {
+    id: "charutoUzumaki",
+    name: "Charuto Uzumaki",
+    color: "#ff9d1a",
+    modelUrl: "/models/superhero-male.glb",
+    outfitUrl: "/models/outfits/Male_Ranger.glb",
+    tagline: "Invocador de raposas, cães e leões",
+    icon: "paw",
+    // Invocador — cada poder "chama" um bicho (ver companions em
+    // abilities.ts): mecanicamente é área com ticks de dano, mas os
+    // bichinhos aparecem de verdade orbitando o ponto invocado.
+    stats: { health: 100, energy: 120, energyRegenPerSec: 8.5, moveSpeed: 6, guard: 80, guardRegenPerSec: 13 },
+    loadout: {
+      common: ["invocarRaposa", "invocarCachorro"],
+      strong: ["invocarLeao", "alcateia"],
+      super: "todosOsInvocados",
+    },
+    basicAttackId: "seloDeChakra",
+    comboAnims: ["Punch_Jab", "Melee_Hook"],
+  },
 } satisfies Record<string, CharacterDef>;
 
 export type CharacterId = keyof typeof CHARACTERS;

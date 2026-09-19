@@ -38,6 +38,24 @@ const ICONS: Record<CharacterIcon, string> = {
     <circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>
     <path stroke-linecap="round" d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/>
   </svg>`,
+  // Três garras — lagarto/veneno.
+  claw: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+    <path d="M5 4 9 20"/>
+    <path d="M11 3 14 21"/>
+    <path d="M17 4 20 18"/>
+  </svg>`,
+  // Chama — controlador de fogo.
+  flame: `<svg viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2c2.2 3 -1.6 4.2 -1.6 7.2a3.6 3.6 0 1 0 7.2 0c0 -1.8 -0.8 -2.8 -0.8 -2.8 0.9 3.6 -0.9 4.6 -1.8 4.6 -1.3 0 -1.8 -1.3 -0.9 -2.7 -1.8 0.9 -2.7 2.7 -2.7 4.5a4.5 4.5 0 0 0 9 0c0 -5.4 -4.5 -6.3 -8.4 -10.8Z"/>
+  </svg>`,
+  // Pata — invocador de bichos.
+  paw: `<svg viewBox="0 0 24 24" fill="currentColor">
+    <ellipse cx="12" cy="16.5" rx="5.5" ry="4.3"/>
+    <ellipse cx="5" cy="9" rx="2.1" ry="2.7"/>
+    <ellipse cx="10.2" cy="5.5" rx="2.1" ry="2.7"/>
+    <ellipse cx="15.8" cy="5.5" rx="2.1" ry="2.7"/>
+    <ellipse cx="21" cy="9" rx="2.1" ry="2.7"/>
+  </svg>`,
 };
 
 export function showMenu(container: HTMLElement): Promise<MenuResult> {

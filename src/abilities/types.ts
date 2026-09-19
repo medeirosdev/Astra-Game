@@ -78,4 +78,9 @@ export interface Ability {
   // Sobrescreve a animação padrão (que só olha target.kind) — pra poderes
   // com uma pose própria, tipo um golpe que cai do ar (ver "Pulo Mortal").
   castAnim?: string;
+  // Só em abilities "zone" — cores dos bichinhos que orbitam o centro da
+  // zona enquanto ela dura (ver Engine.spawnCompanions). Puramente visual
+  // (o dano já vem do tick normal da zone); "invocação" no kit do
+  // Charuto Uzumaki é uma zone com esse enfeite, não uma IA própria.
+  companions?: string[];
 }

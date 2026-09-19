@@ -34,6 +34,27 @@ const OBSTACLE_MELEE_REACH = 3; // mesmo alcance corpo-a-corpo usado contra joga
 // mob no modo Sobrevivência (ver findMobsInRange).
 export const MELEE_REACH = OBSTACLE_MELEE_REACH;
 
+// Hazards ambientais fixos do mapa (ver buildHazards/updateHazards) — lava,
+// buraco que empurra, plataforma que cai. Nenhum depende de rede: cada peer
+// decide sozinho se ELE (jogador local) tá numa zona ruim, igual dano normal
+// ("quem recebe decide") — não tem "atacante" nenhum aqui pra broadcast.
+const LAVA_TICK_MS = 500;
+const LAVA_DAMAGE = 8;
+const PIT_PUSH_STRENGTH = 14; // unidades/s² no centro do buraco, cai com a distância
+const PLATFORM_HALF_SIZE = 1.6;
+const PLATFORM_TOP_Y = 1.1; // alcançável no auge do pulo (~1.45u, ver GRAVITY/JUMP_SPEED)
+const PLATFORM_STEP_DELAY_MS = 900; // tempo em cima antes de começar a afundar
+const PLATFORM_SINK_MS = 500;
+const PLATFORM_RESPAWN_MS = 4000;
+
+// Replay/killcam — grava só a posição do jogador local de tempos em tempos
+// (não precisa de rede nenhuma: cada um vê a própria morte) e, ao morrer,
+// sobrevoa esse rastro em câmera lenta olhando pro ponto da morte por um
+// tempinho antes de voltar pra câmera normal (ver updateKillcamCamera).
+const REPLAY_WINDOW_MS = 4000;
+const REPLAY_SAMPLE_INTERVAL_MS = 130;
+const KILLCAM_DURATION_MS = 2600;
+
 const GRAVITY = 22; // unidades/s² — só afeta o pulo, não é física de verdade
 const JUMP_SPEED = 8; // velocidade vertical inicial do pulo
 const CROUCH_SPEED_FACTOR = 0.5;
@@ -87,6 +108,28 @@ interface RemotePlayer {
   model: CharacterModel | null;
   target: THREE.Vector3;
   yaw: number;
+}
+
+interface LavaPool {
+  position: THREE.Vector3;
+  radius: number;
+  lastTickAt: number;
+}
+
+interface PushPit {
+  position: THREE.Vector3;
+  radius: number;
+}
+
+type PlatformState = "idle" | "sinking" | "collapsed" | "rising";
+
+interface Platform {
+  mesh: THREE.Mesh;
+  position: THREE.Vector3; // centro, y = altura de repouso (PLATFORM_TOP_Y)
+  halfSize: number;
+  state: PlatformState;
+  stateChangedAt: number;
+  standTimer: number; // ms acumulados com alguém em cima, zera se sair
 }
 
 interface MobVisual {
@@ -156,6 +199,9 @@ export class Engine {
   private readonly keys = new Set<string>();
   private readonly projectiles: Projectile[] = [];
   private readonly obstacles: Obstacle[] = [];
+  private readonly lavaPools: LavaPool[] = [];
+  private readonly pushPits: PushPit[] = [];
+  private readonly platforms: Platform[] = [];
   private readonly mobs = new Map<string, MobVisual>();
   private readonly remotePlayers = new Map<string, RemotePlayer>();
   private readonly sun: THREE.DirectionalLight;
@@ -175,6 +221,15 @@ export class Engine {
   private rollUntil = 0;
   private lastRollAt = -Infinity;
   private readonly rollDirection = new THREE.Vector3();
+  // Replay/killcam (ver constantes acima) — buffer curto da própria
+  // trajetória, congelado no instante da morte pra câmera sobrevoar.
+  private readonly replayBuffer: THREE.Vector3[] = [];
+  private lastReplaySampleAt = 0;
+  private wasAliveLastFrame = true;
+  private killcamUntil = 0;
+  private killcamStartedAt = 0;
+  private killcamPath: THREE.Vector3[] = [];
+  private readonly killcamTarget = new THREE.Vector3();
   // Enquanto now < isso, updateMovement não pisa em cima da animação atual
   // com idle/walk/sprint — sem isso, um soco tocado via playOnce era cortado
   // quase na hora pelo próprio loop de movimento no frame seguinte.
@@ -294,6 +349,7 @@ export class Engine {
     this.buildGround();
     this.buildWalls();
     this.buildObstacles();
+    this.buildHazards();
   }
 
   // Um plano só, com textura PBR real (ver textures.ts) repetida — bem mais
@@ -383,6 +439,87 @@ export class Engine {
       });
       placed++;
     }
+  }
+
+  // Hazards ambientais fixos, iguais em todo mapa (independem do tema —
+  // ver mapPresets.ts) — lava, buraco que empurra, plataformas que caem.
+  // Posições fixas, longe do spawn, pra dar pra decorar/evitar de propósito
+  // em vez de ser um obstáculo aleatório igual as caixas.
+  private buildHazards() {
+    for (const [x, z] of [
+      [28, 28],
+      [-28, -28],
+    ] as const) {
+      const radius = 6.5;
+      const geo = new THREE.CircleGeometry(radius, 32);
+      const mat = new THREE.MeshStandardMaterial({
+        color: "#ff5a1a",
+        emissive: "#ff5a1a",
+        emissiveIntensity: 1.6,
+        roughness: 0.6,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(x, 0.03, z);
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+      const light = new THREE.PointLight("#ff5a1a", 3, radius * 2.5);
+      light.position.set(x, 1.2, z);
+      this.scene.add(light);
+      this.lavaPools.push({ position: new THREE.Vector3(x, 0, z), radius, lastTickAt: 0 });
+    }
+
+    {
+      const [x, z] = [0, -34];
+      const radius = 8;
+      const geo = new THREE.CircleGeometry(radius, 32);
+      const mat = new THREE.MeshStandardMaterial({ color: "#0a0612", roughness: 1 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(x, 0.02, z);
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+      this.pushPits.push({ position: new THREE.Vector3(x, 0, z), radius });
+    }
+
+    const platformGeo = new THREE.BoxGeometry(PLATFORM_HALF_SIZE * 2, 0.4, PLATFORM_HALF_SIZE * 2);
+    for (const [x, z] of [
+      [26, -10],
+      [29.5, -13.2],
+      [33, -10],
+      [36.5, -13.2],
+      [40, -10],
+    ] as const) {
+      const material = createTerrainMaterial("rock", { color: "#8a6a3a", roughness: 0.8 });
+      const mesh = new THREE.Mesh(platformGeo, material);
+      mesh.position.set(x, PLATFORM_TOP_Y - 0.2, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+      this.platforms.push({
+        mesh,
+        position: new THREE.Vector3(x, PLATFORM_TOP_Y, z),
+        halfSize: PLATFORM_HALF_SIZE,
+        state: "idle",
+        stateChangedAt: 0,
+        standTimer: 0,
+      });
+    }
+  }
+
+  // Altura do "chão" embaixo de um ponto XZ — normalmente 0 (o plano), mas
+  // vira o topo de uma plataforma se ela existir ali e não tiver afundada
+  // (ver Platform.state). updateVerticalMotion usa isso no lugar do 0 fixo
+  // que existia antes das plataformas.
+  private groundHeightAt(x: number, z: number): number {
+    let best = 0;
+    for (const p of this.platforms) {
+      if (p.state === "collapsed" || p.state === "sinking") continue;
+      if (Math.abs(x - p.position.x) <= p.halfSize && Math.abs(z - p.position.z) <= p.halfSize) {
+        best = Math.max(best, p.position.y);
+      }
+    }
+    return best;
   }
 
   private clampToArena(position: THREE.Vector3) {
@@ -486,6 +623,94 @@ export class Engine {
     }
   }
 
+  // Lava/buraco/plataforma (ver buildHazards) — nenhum tem "atacante", então
+  // não passa por cast/rede nenhuma: cada peer só olha pro PRÓPRIO jogador
+  // (dano/empurrão) e, pras plataformas, pro que sabe de todo mundo (local +
+  // posições remotas já sincronizadas) só pra decidir "afunda ou não".
+  private updateHazards(dt: number) {
+    const now = performance.now();
+    if (!this.runtime.isDead(now)) {
+      const p = this.player.position;
+      if (p.y < 0.5) {
+        for (const lava of this.lavaPools) {
+          if (Math.hypot(p.x - lava.position.x, p.z - lava.position.z) > lava.radius) continue;
+          if (now - lava.lastTickAt < LAVA_TICK_MS) continue;
+          lava.lastTickAt = now;
+          this.runtime.applyEffect([{ kind: "damage", amount: LAVA_DAMAGE }], now);
+        }
+      }
+      for (const pit of this.pushPits) {
+        const dx = p.x - pit.position.x;
+        const dz = p.z - pit.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist >= pit.radius || dist < 0.01) continue;
+        const strength = PIT_PUSH_STRENGTH * (1 - dist / pit.radius) * dt;
+        p.x += (dx / dist) * strength;
+        p.z += (dz / dist) * strength;
+        this.clampToArena(p);
+      }
+    }
+
+    for (const platform of this.platforms) {
+      this.updatePlatform(platform, dt, now);
+    }
+  }
+
+  // Alguém (local ou remoto, ver comentário em updateHazards) tá parado em
+  // cima dessa plataforma agora?
+  private isAnyoneStandingOn(platform: Platform): boolean {
+    const onFootprint = (x: number, y: number, z: number) =>
+      Math.abs(x - platform.position.x) <= platform.halfSize &&
+      Math.abs(z - platform.position.z) <= platform.halfSize &&
+      Math.abs(y - platform.position.y) < 0.3;
+    if (onFootprint(this.player.position.x, this.player.position.y, this.player.position.z)) return true;
+    for (const remote of this.remotePlayers.values()) {
+      if (onFootprint(remote.target.x, remote.target.y, remote.target.z)) return true;
+    }
+    return false;
+  }
+
+  private updatePlatform(platform: Platform, dt: number, now: number) {
+    if (platform.state === "idle") {
+      if (this.isAnyoneStandingOn(platform)) {
+        platform.standTimer += dt * 1000;
+        if (platform.standTimer >= PLATFORM_STEP_DELAY_MS) {
+          platform.state = "sinking";
+          platform.stateChangedAt = now;
+        }
+      } else {
+        platform.standTimer = 0;
+      }
+      return;
+    }
+    if (platform.state === "sinking") {
+      const t = Math.min(1, (now - platform.stateChangedAt) / PLATFORM_SINK_MS);
+      platform.mesh.position.y = THREE.MathUtils.lerp(PLATFORM_TOP_Y - 0.2, -2, t);
+      if (t >= 1) {
+        platform.state = "collapsed";
+        platform.stateChangedAt = now;
+        platform.mesh.visible = false;
+      }
+      return;
+    }
+    if (platform.state === "collapsed") {
+      if (now - platform.stateChangedAt >= PLATFORM_RESPAWN_MS) {
+        platform.state = "rising";
+        platform.stateChangedAt = now;
+        platform.mesh.visible = true;
+        platform.standTimer = 0;
+      }
+      return;
+    }
+    // "rising"
+    const t = Math.min(1, (now - platform.stateChangedAt) / PLATFORM_SINK_MS);
+    platform.mesh.position.y = THREE.MathUtils.lerp(-2, PLATFORM_TOP_Y - 0.2, t);
+    if (t >= 1) {
+      platform.state = "idle";
+      platform.stateChangedAt = now;
+    }
+  }
+
   // IDs dos mobs vivos dentro do alcance — usado no modo Sobrevivência pra
   // saber se um soco/golpe em área acertou algum (ver main.ts). Só cobre
   // instant/área de propósito; projétil não checa mob nessa primeira leva.
@@ -535,7 +760,12 @@ export class Engine {
   }
 
   private updateDeathState(now: number) {
-    this.player.visible = !this.runtime.isDead(now);
+    const isDeadNow = this.runtime.isDead(now);
+    if (isDeadNow && this.wasAliveLastFrame) this.startKillcam(now);
+    this.wasAliveLastFrame = !isDeadNow;
+    // Continua visível durante o killcam mesmo já morto — é o corpo que a
+    // câmera tá sobrevoando; sem isso não haveria nada pra ver no replay.
+    this.player.visible = !isDeadNow || now < this.killcamUntil;
     if (this.runtime.respawnIfReady(now)) {
       this.player.position.copy(SPAWN_POINT);
       // Reseta estado de movimento — morrer no meio de um pulo/rolamento não
@@ -547,9 +777,33 @@ export class Engine {
     }
   }
 
+  // Congela uma cópia do rastro recente (ver recordReplayFrame) — usado por
+  // updateKillcamCamera pra sobrevoar os últimos segundos antes da morte.
+  private startKillcam(now: number) {
+    this.killcamStartedAt = now;
+    this.killcamUntil = now + KILLCAM_DURATION_MS;
+    this.killcamTarget.copy(this.player.position);
+    this.killcamPath = this.replayBuffer.length >= 2 ? this.replayBuffer.map((p) => p.clone()) : [this.player.position.clone(), this.player.position.clone()];
+  }
+
+  // Amostra a própria posição de tempos em tempos, guardando só a janela
+  // dos últimos REPLAY_WINDOW_MS — puramente local, sem rede (ver
+  // constantes acima). Pausa enquanto já morto: não faz sentido gravar o
+  // corpo parado repetidamente, e evita que ele domine o buffer até a
+  // próxima morte.
+  private recordReplayFrame(now: number) {
+    if (this.runtime.isDead(now)) return;
+    if (now - this.lastReplaySampleAt < REPLAY_SAMPLE_INTERVAL_MS) return;
+    this.lastReplaySampleAt = now;
+    this.replayBuffer.push(this.player.position.clone());
+    const maxSamples = Math.ceil(REPLAY_WINDOW_MS / REPLAY_SAMPLE_INTERVAL_MS);
+    if (this.replayBuffer.length > maxSamples) this.replayBuffer.shift();
+  }
+
   private updateMovement(dt: number) {
     const now = performance.now();
     this.updateDeathState(now);
+    this.recordReplayFrame(now);
     this.playerModel.update(dt);
     this.setLocalInvisible(this.runtime.isInvisible(now));
     this.playerModel.group.scale.setScalar(this.runtime.getScaleFactor(now));
@@ -611,11 +865,21 @@ export class Engine {
   }
 
   private updateVerticalMotion(dt: number) {
-    if (this.grounded) return;
+    const groundY = this.groundHeightAt(this.player.position.x, this.player.position.z);
+    if (this.grounded) {
+      // O chão embaixo de mim sumiu (saí da borda de uma plataforma, ou ela
+      // afundou debaixo de mim) — vira queda, sem precisar de pulo.
+      if (this.player.position.y > groundY + 0.05) {
+        this.grounded = false;
+        this.verticalVelocity = 0;
+      } else {
+        return;
+      }
+    }
     this.verticalVelocity -= GRAVITY * dt;
     const nextY = this.player.position.y + this.verticalVelocity * dt;
-    if (nextY <= 0) {
-      this.player.position.y = 0;
+    if (nextY <= groundY) {
+      this.player.position.y = groundY;
       this.grounded = true;
       this.verticalVelocity = 0;
       this.playerModel.playOnce("Jump_Land", "Idle_Loop");
@@ -729,6 +993,11 @@ export class Engine {
   }
 
   private updateCamera() {
+    const now = performance.now();
+    if (now < this.killcamUntil) {
+      this.updateKillcamCamera(now);
+      return;
+    }
     const offsetX = Math.sin(this.yaw) * Math.cos(this.pitch) * CAMERA_DISTANCE;
     const offsetZ = Math.cos(this.yaw) * Math.cos(this.pitch) * CAMERA_DISTANCE;
     const offsetY = CAMERA_HEIGHT + Math.sin(this.pitch) * CAMERA_DISTANCE;
@@ -748,6 +1017,23 @@ export class Engine {
 
     this.camera.position.lerp(desired, 0.2);
     this.camera.lookAt(this.player.position.x, this.player.position.y + 1, this.player.position.z);
+  }
+
+  // Sobrevoa killcamPath (o rastro dos últimos segundos, ver startKillcam)
+  // em câmera lenta, sempre olhando pro ponto exato da morte — não é uma
+  // reconstituição em primeira pessoa de verdade, é um "veja o que
+  // aconteceu" cinematográfico, avião orbitando a cena.
+  private updateKillcamCamera(now: number) {
+    const t = THREE.MathUtils.clamp((now - this.killcamStartedAt) / KILLCAM_DURATION_MS, 0, 1);
+    const path = this.killcamPath;
+    const idx = t * (path.length - 1);
+    const i0 = Math.floor(idx);
+    const i1 = Math.min(path.length - 1, i0 + 1);
+    const pos = path[i0].clone().lerp(path[i1], idx - i0);
+
+    const camPos = pos.clone().add(new THREE.Vector3(Math.sin(t * 4) * 3.5, 3.6, Math.cos(t * 4) * 3.5 + 4));
+    this.camera.position.lerp(camPos, 0.15);
+    this.camera.lookAt(this.killcamTarget.x, this.killcamTarget.y + 1, this.killcamTarget.z);
   }
 
   isPointerLocked(): boolean {
@@ -991,6 +1277,50 @@ export class Engine {
       spawnParticleBurst(this.scene, this.particleRenderer, ability.vfx.particle, center, ability.vfx.color);
       this.triggerShakeAt(center, 0.4, radius * 4, 260);
       if (durationMs > 0) this.spawnHazardZone(center, radius, durationMs, ability.vfx.color);
+      if (ability.companions?.length) this.spawnCompanions(center, durationMs, ability.companions);
+    };
+    tick();
+  }
+
+  // Bichinhos que orbitam um ponto fixo enquanto uma "zone" com
+  // `companions` (ver abilities/types.ts) dura — puramente visual, o dano
+  // já vem do tick normal da zone (ver combat.ts). Ficam parados no ponto
+  // onde a zone nasceu, não seguem quem invocou.
+  private spawnCompanions(center: THREE.Vector3, durationMs: number, colors: string[]) {
+    const meshes = colors.map((color) => {
+      const group = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.7, flatShading: true });
+      const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.35, 0), bodyMat);
+      body.position.y = 0.35;
+      body.castShadow = true;
+      group.add(body);
+      const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 0), bodyMat);
+      head.position.set(0, 0.42, 0.3);
+      group.add(head);
+      group.position.copy(center);
+      this.scene.add(group);
+      return group;
+    });
+
+    const baseAngle = Math.random() * Math.PI * 2;
+    const orbitRadius = 2.2;
+    const startedAt = performance.now();
+    const tick = () => {
+      const t = performance.now() - startedAt;
+      if (t >= durationMs) {
+        for (const m of meshes) this.scene.remove(m);
+        return;
+      }
+      meshes.forEach((m, i) => {
+        const angle = baseAngle + (i / meshes.length) * Math.PI * 2 + t * 0.0018;
+        m.position.set(
+          center.x + Math.cos(angle) * orbitRadius,
+          center.y + 0.15 + Math.sin(t * 0.006 + i) * 0.1,
+          center.z + Math.sin(angle) * orbitRadius,
+        );
+        m.rotation.y = -angle + Math.PI / 2;
+      });
+      requestAnimationFrame(tick);
     };
     tick();
   }
@@ -1114,6 +1444,7 @@ export class Engine {
       this.updateProjectiles(dt);
       this.updateRemotePlayers(dt);
       this.updateMobVisuals(dt);
+      this.updateHazards(dt);
       this.updateAttackTrail();
       this.particleRenderer.update(dt);
       this.onHudUpdate(this.runtime);
