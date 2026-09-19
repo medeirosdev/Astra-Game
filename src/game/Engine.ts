@@ -189,7 +189,7 @@ export class Engine {
     this.player = new THREE.Group();
     this.player.position.copy(SPAWN_POINT);
     this.scene.add(this.player);
-    this.playerModel = new CharacterModel(character.modelUrl, character.color);
+    this.playerModel = new CharacterModel(character.modelUrl, character.color, character.skinTextureUrl, character.outfitUrl);
     this.player.add(this.playerModel.group);
 
     this.composer = new EffectComposer(this.renderer);
@@ -715,7 +715,7 @@ export class Engine {
     this.remotePlayers.set(peerId, { group, placeholder, model: null, target: group.position.clone(), yaw: 0 });
   }
 
-  setRemotePlayerCharacter(peerId: string, modelUrl: string, tintColor: string) {
+  setRemotePlayerCharacter(peerId: string, modelUrl: string, tintColor: string, skinTextureUrl?: string, outfitUrl?: string) {
     const remote = this.remotePlayers.get(peerId);
     if (!remote || remote.model) return;
     if (remote.placeholder) {
@@ -724,7 +724,7 @@ export class Engine {
       (remote.placeholder.material as THREE.Material).dispose();
       remote.placeholder = null;
     }
-    remote.model = new CharacterModel(modelUrl, tintColor);
+    remote.model = new CharacterModel(modelUrl, tintColor, skinTextureUrl, outfitUrl);
     remote.group.add(remote.model.group);
   }
 

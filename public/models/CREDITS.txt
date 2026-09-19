@@ -21,3 +21,30 @@ higher resolution than this project's simple lighting setup needs.
 
 Replaces the earlier Kenney "Blocky Characters" models (character-j/l/q.glb) to
 get crouch/jump/roll animations, which that pack didn't include.
+
+skin-male-light.png, skin-female-light.png
+From the same "Universal Base Characters" Standard pack — the "Light" skin-tone
+base color texture (the pack ships one "Dark" and one "Light" variant per gender;
+the glb files above already embed "Dark"). Swapped in at runtime per character
+(see CharacterModel.loadSkinTexture) only when the character has no outfit set
+(see below) — an outfit already brings its own skin texture.
+
+outfits/Male_Ranger.glb, outfits/Male_Peasant.glb, outfits/Female_Ranger.glb
+From Quaternius's "Modular Character Outfits - Fantasy" (Standard/free tier —
+only Peasant and Ranger are free per gender, the other ~10 outfits are
+Source/paid). Same 65-bone rig as the base characters, explicitly built to be
+compatible ("compatible with Universal Base Character heads and Universal
+Animation Library"). License: CC0 1.0 Universal.
+
+Each outfit file already includes its own full body (arms/legs/feet/torso,
+with its own skin texture) — it's a complete alternate body, not just a
+garment layer. Attached via bone-name remapping (ver
+CharacterModel.attachOutfit/remapSkinIndices): the outfit's skinIndex
+attribute is rewritten to point at the SAME cloned skeleton the base
+character uses, so it animates for free off the existing AnimationMixer
+instead of needing a second one. The base body's own clothing/skin mesh is
+hidden (not removed — the skeleton it shares doesn't depend on it) whenever
+an outfit is set.
+
+Converted the same way as the base characters (`gltf-pipeline -b`, textures
+downscaled 2048→512 via PIL).

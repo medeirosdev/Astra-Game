@@ -7,6 +7,7 @@ import { setupSync, PLACEHOLDER_COLOR, type MobSnapshot } from "./network/sync";
 import { CHARACTERS, isCharacterId } from "./characters/characters";
 import { ABILITIES, isAbilityId, type AbilityId } from "./abilities/abilities";
 import type { Ability } from "./abilities/types";
+import type { CharacterDef } from "./characters/types";
 import { resolveIncomingCast } from "./game/combat";
 import { MatchState, LOCAL_SCORE_KEY } from "./game/match";
 import { SurvivalState, type SurvivalPhase } from "./game/survival";
@@ -154,8 +155,8 @@ async function main() {
 
   sync.onHello(({ characterId: remoteCharacterId }, peerId) => {
     if (!isCharacterId(remoteCharacterId)) return;
-    const remoteCharacter = CHARACTERS[remoteCharacterId];
-    engine.setRemotePlayerCharacter(peerId, remoteCharacter.modelUrl, remoteCharacter.color);
+    const remoteCharacter: CharacterDef = CHARACTERS[remoteCharacterId];
+    engine.setRemotePlayerCharacter(peerId, remoteCharacter.modelUrl, remoteCharacter.color, remoteCharacter.skinTextureUrl, remoteCharacter.outfitUrl);
   });
   sync.onPosition((transform, peerId) => {
     engine.updateRemotePlayer(peerId, transform);

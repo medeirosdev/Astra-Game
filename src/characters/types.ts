@@ -30,8 +30,14 @@ export interface CharacterDef {
   modelUrl: string;
   // Variante de textura de pele (ver public/models/CREDITS.txt) — dois
   // personagens do mesmo corpo base (macho/fêmea) usam texturas diferentes
-  // pra não parecerem clones um do outro, além do tint de cor.
+  // pra não parecerem clones um do outro, além do tint de cor. Ignorado
+  // quando outfitUrl está definido (o traje já vem com a própria pele).
   skinTextureUrl?: string;
+  // Traje completo (ver CharacterModel.attachOutfit/public/models/CREDITS.txt)
+  // costurado nos mesmos ossos do corpo base, substituindo a roupa/pele
+  // "nua" original — é isso que dá uma skin de verdade por personagem, não
+  // só cor diferente no mesmo corpo.
+  outfitUrl?: string;
   tagline: string;
   icon: CharacterIcon;
   stats: CharacterStats;

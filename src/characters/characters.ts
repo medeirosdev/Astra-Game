@@ -8,6 +8,7 @@ export const CHARACTERS = {
     name: "Sensei",
     color: "#7b5cff",
     modelUrl: "/models/superhero-female.glb",
+    outfitUrl: "/models/outfits/Female_Ranger.glb",
     tagline: "Mobilidade e explosão",
     icon: "eye",
     // Inspirado no Gojo Satoru (ver about.md/ROADMAP.md) — vida mais baixa,
@@ -30,6 +31,7 @@ export const CHARACTERS = {
     name: "Testador",
     color: "#4fa3ff",
     modelUrl: "/models/superhero-male.glb",
+    outfitUrl: "/models/outfits/Male_Peasant.glb",
     tagline: "Equilibrado",
     icon: "bolt",
     stats: { health: 100, energy: 100, energyRegenPerSec: 8, moveSpeed: 6, guard: 80, guardRegenPerSec: 14 },
@@ -47,6 +49,7 @@ export const CHARACTERS = {
     name: "Guardião",
     color: "#7dffb3",
     modelUrl: "/models/superhero-male.glb",
+    outfitUrl: "/models/outfits/Male_Ranger.glb",
     tagline: "Tanque e controle",
     icon: "shield",
     // Guarda alta e regenera devagar — é o tanque, segurar o bloqueio
@@ -67,6 +70,7 @@ export const CHARACTERS = {
     name: "John Kaisen",
     color: "#5b2a8c",
     modelUrl: "/models/superhero-male.glb",
+    outfitUrl: "/models/outfits/Male_Ranger.glb",
     tagline: "Vazio, espaço e tempo",
     icon: "void",
     // Mago de controle à distância — não quer chegar perto: puxa o
@@ -87,6 +91,7 @@ export const CHARACTERS = {
     name: "Ronnie",
     color: "#c94b2b",
     modelUrl: "/models/superhero-male.glb",
+    outfitUrl: "/models/outfits/Male_Peasant.glb",
     tagline: "Fúria e terremotos",
     icon: "quake",
     // Brigão bruto — nada de magia sofisticada: dano físico alto, uma
