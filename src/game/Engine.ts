@@ -14,6 +14,7 @@ import { createParticleRenderer, spawnParticleBurst, spawnShockwaveRing } from "
 import type { BatchedRenderer } from "three.quarks";
 import { MOB_TYPES } from "./mobs";
 import type { MobSnapshot } from "../network/sync";
+import { rollCardRarity, CARD_COLOR } from "./cards";
 
 const GRID_SIZE = 240; // 10x o tamanho original (24), a pedido
 const BLOCK_SIZE = 1;
@@ -54,6 +55,14 @@ const PLATFORM_RESPAWN_MS = 4000;
 const REPLAY_WINDOW_MS = 4000;
 const REPLAY_SAMPLE_INTERVAL_MS = 130;
 const KILLCAM_DURATION_MS = 2600;
+
+// Baús — coleta é PESSOAL: cada peer decide sozinho, no próprio cliente,
+// se abriu (sem mensagem de rede nenhuma). Não é "quem chega primeiro
+// pega", é cada jogador com o próprio cronômetro de respawn do baú — mais
+// simples que disputar posse por rede, e cartas são recurso de risco
+// pessoal (perde tudo ao morrer), não um recurso escasso compartilhado.
+const CHEST_PICKUP_RADIUS = 2.2;
+const CHEST_RESPAWN_MS = 25000;
 
 const GRAVITY = 22; // unidades/s² — só afeta o pulo, não é física de verdade
 const JUMP_SPEED = 8; // velocidade vertical inicial do pulo
@@ -137,6 +146,12 @@ interface MobVisual {
   target: THREE.Vector3;
 }
 
+interface Chest {
+  group: THREE.Group;
+  position: THREE.Vector3;
+  readyAt: number; // 0 = disponível agora
+}
+
 export interface Transform {
   x: number;
   y: number;
@@ -202,6 +217,7 @@ export class Engine {
   private readonly lavaPools: LavaPool[] = [];
   private readonly pushPits: PushPit[] = [];
   private readonly platforms: Platform[] = [];
+  private readonly chests: Chest[] = [];
   private readonly mobs = new Map<string, MobVisual>();
   private readonly remotePlayers = new Map<string, RemotePlayer>();
   private readonly sun: THREE.DirectionalLight;
@@ -350,6 +366,8 @@ export class Engine {
     this.buildWalls();
     this.buildObstacles();
     this.buildHazards();
+    this.buildStructures();
+    this.buildChests();
   }
 
   // Um plano só, com textura PBR real (ver textures.ts) repetida — bem mais
@@ -505,6 +523,113 @@ export class Engine {
         standTimer: 0,
       });
     }
+  }
+
+  // Casas simples — só paredes com vão de porta (sempre virada pro +Z) e um
+  // teto plano. Sem colisão de verdade (nada no jogo tem, nem obstáculo nem
+  // parede da arena — ver clampToArena), então dá pra atravessar a parede
+  // andando, mas o vão da porta é o caminho óbvio/visual de entrada.
+  private buildStructures() {
+    this.buildHouse(-50, 15, 10, 8);
+    this.buildHouse(50, -30, 10, 8);
+  }
+
+  private buildHouse(cx: number, cz: number, width: number, depth: number) {
+    const height = WALL_HEIGHT;
+    const thickness = 0.5;
+    const doorWidth = 2.6;
+    const material = createTerrainMaterial("rock", { color: "#6b5030", roughness: 0.95 });
+
+    const addWall = (w: number, h: number, d: number, x: number, y: number, z: number) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      mesh.position.set(cx + x, y, cz + z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+    };
+
+    addWall(width, height, thickness, 0, height / 2, -depth / 2); // fundo
+    addWall(thickness, height, depth, -width / 2, height / 2, 0); // esquerda
+    addWall(thickness, height, depth, width / 2, height / 2, 0); // direita
+    const sideWidth = (width - doorWidth) / 2;
+    // frente, com vão de porta no meio (dois pedaços, não uma parede só)
+    addWall(sideWidth, height, thickness, -(doorWidth / 2 + sideWidth / 2), height / 2, depth / 2);
+    addWall(sideWidth, height, thickness, doorWidth / 2 + sideWidth / 2, height / 2, depth / 2);
+    addWall(width + thickness * 2, 0.4, depth + thickness * 2, 0, height + 0.2, 0); // teto
+  }
+
+  private createChestMesh(): THREE.Group {
+    const group = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: "#6b4423", roughness: 0.8 });
+    const trimMat = new THREE.MeshStandardMaterial({
+      color: "#d4a83b",
+      roughness: 0.4,
+      metalness: 0.6,
+      emissive: "#d4a83b",
+      emissiveIntensity: 0.4,
+    });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 0.75), bodyMat);
+    body.position.y = 0.35;
+    body.castShadow = true;
+    group.add(body);
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.25, 0.8), bodyMat);
+    lid.position.y = 0.82;
+    lid.castShadow = true;
+    group.add(lid);
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.12, 0.06), trimMat);
+    trim.position.set(0, 0.7, 0.4);
+    group.add(trim);
+    return group;
+  }
+
+  // Baús espalhados pelo mapa (2 dentro das casas, o resto no aberto) — ver
+  // updateChests pra pegar e cards.ts pra raridade/bônus.
+  private buildChests() {
+    const positions: [number, number][] = [
+      [-50, 15],
+      [50, -30],
+      [-15, -40],
+      [40, 20],
+      [-40, 45],
+      [15, 45],
+    ];
+    for (const [x, z] of positions) {
+      const group = this.createChestMesh();
+      group.position.set(x, 0, z);
+      this.scene.add(group);
+      const light = new THREE.PointLight("#ffd27a", 1.4, 4);
+      light.position.set(x, 1, z);
+      this.scene.add(light);
+      this.chests.push({ group, position: new THREE.Vector3(x, 0, z), readyAt: 0 });
+    }
+  }
+
+  // Coleta é pessoal e só local (ver constante CHEST_PICKUP_RADIUS) — cada
+  // peer confere a própria distância até cada baú, sem round-trip de rede.
+  private updateChests(now: number) {
+    for (const chest of this.chests) {
+      if (chest.readyAt !== 0 && now >= chest.readyAt && !chest.group.visible) {
+        chest.group.visible = true;
+        chest.readyAt = 0;
+      }
+    }
+    if (this.runtime.isDead(now)) return;
+    const p = this.player.position;
+    for (const chest of this.chests) {
+      if (!chest.group.visible) continue;
+      if (Math.hypot(p.x - chest.position.x, p.z - chest.position.z) > CHEST_PICKUP_RADIUS) continue;
+      this.openChest(chest, now);
+    }
+  }
+
+  private openChest(chest: Chest, now: number) {
+    const rarity = rollCardRarity();
+    this.runtime.addCard(rarity);
+    const worldPos = chest.position.clone().add(new THREE.Vector3(0, 0.8, 0));
+    spawnParticleBurst(this.scene, this.particleRenderer, "nova", worldPos, CARD_COLOR[rarity]);
+    playSound("chime");
+    chest.group.visible = false;
+    chest.readyAt = now + CHEST_RESPAWN_MS;
   }
 
   // Altura do "chão" embaixo de um ponto XZ — normalmente 0 (o plano), mas
@@ -1445,6 +1570,7 @@ export class Engine {
       this.updateRemotePlayers(dt);
       this.updateMobVisuals(dt);
       this.updateHazards(dt);
+      this.updateChests(performance.now());
       this.updateAttackTrail();
       this.particleRenderer.update(dt);
       this.onHudUpdate(this.runtime);

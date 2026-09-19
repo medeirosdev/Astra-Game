@@ -4,6 +4,7 @@ import type { CharacterDef } from "../characters/types";
 import { LOCAL_SCORE_KEY, type MatchState } from "../game/match";
 import type { SurvivalState } from "../game/survival";
 import { MOB_TYPES } from "../game/mobs";
+import { CARD_COLOR } from "../game/cards";
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.ceil(ms / 1000);
@@ -28,6 +29,8 @@ export class Hud {
   private readonly waveEl: HTMLDivElement;
   private readonly bossBarEl: HTMLDivElement;
   private readonly bossBarFillEl: HTMLDivElement;
+  private readonly cardsEl: HTMLDivElement;
+  private lastCardCount = 0;
 
   constructor(container: HTMLElement, character: CharacterDef) {
     this.root = document.createElement("div");
@@ -54,6 +57,10 @@ export class Hud {
     guardBar.appendChild(this.guardFill);
 
     bars.append(healthBar, energyBar, guardBar);
+
+    this.cardsEl = document.createElement("div");
+    this.cardsEl.className = "cards-info";
+    bars.appendChild(this.cardsEl);
 
     const slots = document.createElement("div");
     slots.className = "hud-slots";
@@ -167,6 +174,43 @@ export class Hud {
       this.deathOverlayEl.style.display = "flex";
     } else {
       this.deathOverlayEl.style.display = "none";
+    }
+
+    this.updateCards(runtime);
+  }
+
+  // Cartas de baú (ver Engine.openChest/cards.ts) — uma bolinha colorida
+  // por carta (cor = raridade) e o bônus total, com um pulso rápido quando
+  // ganha uma nova (ou zera tudo ao morrer, ver AbilityRuntime).
+  private updateCards(runtime: AbilityRuntime) {
+    const cards = runtime.getCards();
+    if (cards.length === this.lastCardCount) return;
+    const grew = cards.length > this.lastCardCount;
+    this.lastCardCount = cards.length;
+
+    this.cardsEl.replaceChildren();
+    if (cards.length === 0) {
+      this.cardsEl.style.display = "none";
+      return;
+    }
+    this.cardsEl.style.display = "flex";
+    const bonusPct = Math.round(runtime.getCardBonus() * 100);
+    const label = document.createElement("span");
+    label.textContent = `+${bonusPct}% dano`;
+    this.cardsEl.appendChild(label);
+    const dots = document.createElement("div");
+    dots.className = "card-dots";
+    for (const rarity of cards) {
+      const dot = document.createElement("span");
+      dot.className = "card-dot";
+      dot.style.background = CARD_COLOR[rarity];
+      dots.appendChild(dot);
+    }
+    this.cardsEl.appendChild(dots);
+    if (grew) {
+      this.cardsEl.classList.remove("pulse");
+      void this.cardsEl.offsetWidth;
+      this.cardsEl.classList.add("pulse");
     }
   }
 

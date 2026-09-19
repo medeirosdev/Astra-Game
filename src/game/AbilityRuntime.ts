@@ -1,6 +1,7 @@
 import type { Ability, AbilityEffect } from "../abilities/types";
 import { ABILITIES, type AbilityId } from "../abilities/abilities";
 import type { CharacterDef } from "../characters/types";
+import { CARD_BONUS, type CardRarity } from "./cards";
 
 export interface CastResult {
   ability: Ability;
@@ -41,6 +42,9 @@ export class AbilityRuntime {
   private damageFactorUntil = 0;
   private scaleFactor = 1;
   private scaleFactorUntil = 0;
+  // Cartas coletadas em baús (ver Engine.updateChests/cards.ts) — % de dano
+  // permanente que acumula enquanto vivo, zera tudo ao morrer.
+  private cards: CardRarity[] = [];
 
   constructor(private readonly character: CharacterDef) {
     this.health = character.stats.health;
@@ -129,7 +133,12 @@ export class AbilityRuntime {
         this.guard -= toGuard;
         const toHealth = amount - toGuard;
         this.health = Math.max(0, this.health - toHealth);
-        if (this.health === 0) this.deadUntil = now + RESPAWN_DELAY_MS;
+        // "ao morrer, perde todas" — zera na hora da morte, não no respawn
+        // (senão o HUD mostraria as cartas por 3s enquanto já tá morto).
+        if (this.health === 0 && this.deadUntil <= now) {
+          this.deadUntil = now + RESPAWN_DELAY_MS;
+          this.cards = [];
+        }
         break;
       }
       case "heal":
@@ -170,8 +179,23 @@ export class AbilityRuntime {
     return now < this.speedFactorUntil ? this.speedFactor : 1;
   }
 
+  // Buff temporário de habilidade (ex: Ativa Rage) multiplica em cima do
+  // bônus permanente das cartas — os dois empilham.
   getDamageFactor(now: number): number {
-    return now < this.damageFactorUntil ? this.damageFactor : 1;
+    const temp = now < this.damageFactorUntil ? this.damageFactor : 1;
+    return temp * (1 + this.getCardBonus());
+  }
+
+  addCard(rarity: CardRarity) {
+    this.cards.push(rarity);
+  }
+
+  getCards(): readonly CardRarity[] {
+    return this.cards;
+  }
+
+  getCardBonus(): number {
+    return this.cards.reduce((sum, r) => sum + CARD_BONUS[r], 0);
   }
 
   isInvisible(now: number): boolean {
