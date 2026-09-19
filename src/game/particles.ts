@@ -57,6 +57,9 @@ const PRESETS: Record<string, BurstPreset> = {
   // Marca curta no rastro do punho/chute durante o swing — muito pequena e
   // quase parada, é só um "afterimage" pontilhado, não uma explosão.
   swipeTrail: { count: 3, life: [0.14, 0.2], speed: [0.2, 0.6], size: [0.07, 0.12], radius: 0.03, gravity: 0 },
+  // Faíscas finas de metal — boca de disparo e impacto do corte que viaja
+  // (ver Engine.castAbilityAt/updateProjectiles, vfx.particle "slash").
+  slash: { count: 16, life: [0.16, 0.28], speed: [4, 9], size: [0.07, 0.15], radius: 0.06, gravity: -3 },
 };
 const DEFAULT_PRESET = PRESETS.spark;
 

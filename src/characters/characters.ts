@@ -22,9 +22,9 @@ export const CHARACTERS = {
       super: "dominioVazio",
     },
     basicAttackId: "senseiSoco",
-    // Rajada rápida — dois golpes curtos alternados, cooldown baixo (ver
-    // abilities.ts) já faz o ritmo parecer um combo de socos velozes.
-    comboAnims: ["Punch_Jab", "Melee_Hook"],
+    // Rajada rápida — 3 golpes curtos alternados, cooldown baixo (ver
+    // abilities.ts) já faz o ritmo parecer uma sequência veloz de socos.
+    comboAnims: ["Punch_Jab", "Punch_Jab", "Melee_Hook"],
   },
   testador: {
     id: "testador",
@@ -41,8 +41,8 @@ export const CHARACTERS = {
       super: "explosaoDefinitiva",
     },
     basicAttackId: "testadorSoco",
-    // Jab-cruzado clássico de boxe.
-    comboAnims: ["Punch_Jab", "Punch_Cross"],
+    // Jab-jab-cruzado-gancho — combo clássico de boxe, 4 golpes.
+    comboAnims: ["Punch_Jab", "Punch_Jab", "Punch_Cross", "Melee_Hook"],
   },
   guardiao: {
     id: "guardiao",
@@ -61,9 +61,10 @@ export const CHARACTERS = {
       super: "tempestadeDeGelo",
     },
     basicAttackId: "guardiaoSoco",
-    // Golpe curto de aquecimento seguido de um soco de cima pra baixo,
-    // pesado — combina com o cooldown mais lento dele.
-    comboAnims: ["Sword_Regular_A", "OverhandThrow"],
+    // 3 cortes de espada em sequência (A/B/C, cada um um ângulo diferente)
+    // fechando com um golpe de cima pra baixo, pesado — combina com o
+    // cooldown mais lento dele.
+    comboAnims: ["Sword_Regular_A", "Sword_Regular_B", "Sword_Regular_C", "OverhandThrow"],
   },
   johnKaisen: {
     id: "johnKaisen",
@@ -84,7 +85,7 @@ export const CHARACTERS = {
       super: "expansaoDeDominio",
     },
     basicAttackId: "johnKaisenSoco",
-    comboAnims: ["Sword_Regular_B", "Melee_Hook"],
+    comboAnims: ["Sword_Regular_B", "Melee_Hook", "Sword_Regular_A"],
   },
   ronnie: {
     id: "ronnie",
@@ -104,7 +105,7 @@ export const CHARACTERS = {
       super: "choqueSismico",
     },
     basicAttackId: "ronnieSoco",
-    comboAnims: ["Melee_Hook", "Punch_Cross"],
+    comboAnims: ["Melee_Hook", "Punch_Cross", "OverhandThrow"],
   },
 } satisfies Record<string, CharacterDef>;
 

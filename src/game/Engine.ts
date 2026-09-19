@@ -53,6 +53,10 @@ const HIT_REACTION_LOCK_MS = 300;
 // rastro do soco/chute, e de quanto em quanto tempo.
 const ATTACK_TRAIL_WINDOW_MS = 220;
 const TRAIL_SAMPLE_INTERVAL_MS = 35;
+// Velocidade de giro da lâmina em crescente (ver createSlashMesh/
+// updateProjectiles) — rad/s. Vetor reaproveitado pra não alocar por frame.
+const SLASH_SPIN_SPEED = 22;
+const SLASH_SPIN_AXIS = new THREE.Vector3();
 
 interface Projectile {
   mesh: THREE.Mesh;
@@ -112,6 +116,33 @@ function findEffect<K extends AbilityEffect["kind"]>(
   kind: K,
 ): Extract<AbilityEffect, { kind: K }> | undefined {
   return effects.find((e) => e.kind === kind) as Extract<AbilityEffect, { kind: K }> | undefined;
+}
+
+// Bola de energia padrão — projétil mágico "normal" (ver createSlashMesh
+// pro caso físico).
+function createOrbMesh(color: string): THREE.Mesh {
+  const geo = new THREE.SphereGeometry(0.25, 12, 12);
+  const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 2 });
+  return new THREE.Mesh(geo, mat);
+}
+
+// Lâmina em crescente — visual do "corte" que viaja (ver characters.ts,
+// personagens físicos cujo soco básico virou projétil). Gira em torno do
+// próprio eixo de voo (ver updateProjectiles) pra ler como lâmina
+// girando de qualquer ângulo de câmera, não só de um lado específico.
+function createSlashMesh(color: string): THREE.Mesh {
+  const geo = new THREE.RingGeometry(0.28, 0.5, 20, 1, 0, Math.PI * 1.15);
+  const mat = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.95,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.y = Math.PI / 2;
+  return mesh;
 }
 
 export class Engine {
@@ -238,10 +269,10 @@ export class Engine {
   // updateSun), mantendo sombra nítida sempre perto de quem importa em vez
   // de tentar cobrir o mapa inteiro de uma vez.
   private setupLights(): THREE.DirectionalLight {
-    const ambient = new THREE.AmbientLight(0x445566, 1.2);
+    const ambient = new THREE.AmbientLight(0x8090a5, 1.9);
     this.scene.add(ambient);
 
-    const sun = new THREE.DirectionalLight(0xfff2d9, 1.8);
+    const sun = new THREE.DirectionalLight(0xfff2d9, 2.6);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.left = -30;
@@ -269,8 +300,14 @@ export class Engine {
   // bonito e mais barato de renderizar que os 6400+ cubos do checkerboard
   // antigo, que só tinha cor sólida por instância.
   private buildGround() {
-    const geo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
-    const mat = createTerrainMaterial(this.map.groundTexture, { repeat: GRID_SIZE / 6, roughness: 1 });
+    // Bem maior que GRID_SIZE (a área jogável de verdade, com paredes) e que
+    // o alcance da neblina (ver `this.scene.fog` no construtor) — clareando
+    // o mapa (ver mapPresets.ts) a borda onde o plano do chão acabava virou
+    // uma linha de horizonte reta e feia contra o fundo; um chão bem maior
+    // some dentro da neblina antes de chegar na própria borda.
+    const groundSize = GRID_SIZE * 3;
+    const geo = new THREE.PlaneGeometry(groundSize, groundSize);
+    const mat = createTerrainMaterial(this.map.groundTexture, { repeat: groundSize / 6, roughness: 1 });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.rotation.x = -Math.PI / 2;
     mesh.castShadow = false;
@@ -613,12 +650,18 @@ export class Engine {
     this.hitStopUntil = performance.now() + durationMs;
   }
 
-  // Poeira física + tremor de câmera + hit-stop no ponto exato do acerto —
-  // só quando um golpe conecta de verdade (não em todo swing). Cor neutra
-  // fixa de propósito: soco não é mágico, não usa a cor da habilidade.
+  // Poeira física + faísca + flash de luz breve + tremor de câmera + hit-stop
+  // no ponto exato do acerto — só quando um golpe conecta de verdade (não em
+  // todo swing). Cor neutra fixa de propósito: soco não é mágico, não usa a
+  // cor da habilidade.
   triggerImpact(at: { x: number; y: number; z: number }) {
     const worldPos = new THREE.Vector3(at.x, at.y, at.z);
     spawnParticleBurst(this.scene, this.particleRenderer, "punchImpact", worldPos, "#d8cdb8");
+    spawnParticleBurst(this.scene, this.particleRenderer, "spark", worldPos, "#fff6e0");
+    const light = new THREE.PointLight(0xfff2d0, 7, 5);
+    light.position.copy(worldPos);
+    this.scene.add(light);
+    setTimeout(() => this.scene.remove(light), 90);
     this.triggerShakeAt(worldPos, 0.22, 6, 130);
     this.triggerHitStop(65);
   }
@@ -793,13 +836,10 @@ export class Engine {
     playSound(ability.vfx.sound);
     if (ability.target.kind === "projectile") {
       const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(UP, yaw);
-      const geo = new THREE.SphereGeometry(0.25, 12, 12);
-      const mat = new THREE.MeshStandardMaterial({
-        color: ability.vfx.color,
-        emissive: ability.vfx.color,
-        emissiveIntensity: 2,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
+      // "Corte" (ataque físico à distância, ver characters.ts) usa uma
+      // lâmina em crescente que gira em voo em vez da esfera brilhante
+      // padrão — física não é mágica, não devia parecer uma bola de energia.
+      const mesh = ability.vfx.particle === "slash" ? createSlashMesh(ability.vfx.color) : createOrbMesh(ability.vfx.color);
       mesh.position.copy(originVec).add(new THREE.Vector3(0, 0.5, 0)).addScaledVector(forward, 1);
       const velocity = forward.clone().multiplyScalar(ability.target.speed);
       this.scene.add(mesh);
@@ -841,6 +881,12 @@ export class Engine {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
       p.mesh.position.addScaledVector(p.velocity, dt);
+      // Lâmina de corte gira em torno do próprio eixo de voo (ver
+      // createSlashMesh) — checar o tipo de geometria em vez de guardar
+      // uma flag extra no Projectile, só a esfera padrão não é RingGeometry.
+      if (p.mesh.geometry.type === "RingGeometry") {
+        p.mesh.rotateOnWorldAxis(SLASH_SPIN_AXIS.copy(p.velocity).normalize(), dt * SLASH_SPIN_SPEED);
+      }
 
       if (p.damage !== null) {
         const hit = this.obstacles.find(

@@ -11,23 +11,28 @@ export const MAP_PRESETS: MapPreset[] = [
   {
     name: "Abismo Noturno",
     groundTexture: "abyss",
-    wallColor: 0x1b2338,
-    obstacleColor: 0x4a3728,
-    backgroundColor: 0x0a0a12,
+    wallColor: 0x2a3550,
+    obstacleColor: 0x5a4535,
+    // Continua o mais escuro dos 3 (é literalmente "noturno") mas não mais
+    // preto puro — preto puro engolia toda a luz ambiente/sol (ver
+    // setupLights), tava escuro DEMAIS mesmo pro tema pedir isso.
+    backgroundColor: 0x1c2038,
   },
   {
     name: "Deserto Crestado",
     groundTexture: "desert",
-    wallColor: 0x3a2818,
-    obstacleColor: 0x8a6a3a,
-    backgroundColor: 0x1c130a,
+    wallColor: 0x4a3420,
+    obstacleColor: 0x9a7a4a,
+    // Deserto é sol escaldante, não breu — neblina/fundo clara e quente.
+    backgroundColor: 0x9c7a52,
   },
   {
     name: "Gelo Eterno",
     groundTexture: "ice",
-    wallColor: 0x1f3540,
-    obstacleColor: 0x5a7a8a,
-    backgroundColor: 0x0a1418,
+    wallColor: 0x2a4550,
+    obstacleColor: 0x6a8a9a,
+    // Dia nublado claro, não noite — neblina azulada bem mais clara.
+    backgroundColor: 0xa8bcc9,
   },
 ];
 

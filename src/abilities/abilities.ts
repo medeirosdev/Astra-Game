@@ -313,17 +313,21 @@ export const ABILITIES = {
   // Socos do botão esquerdo do mouse — uma receita por personagem (ver
   // CharacterDef.basicAttackId), custo 0, fora dos 5 slots. cooldownMs aqui
   // é o ritmo do combo: mais baixo = socos mais rápidos.
+  // Físico, mas à distância — o soco tão forte que solta uma onda de corte
+  // que viaja (ver createSlashMesh em Engine.ts, personagens "físicos" do
+  // elenco: testador/guardiao/ronnie). Continua sem custo/mágica nenhuma,
+  // só o alcance que mudou de corpo-a-corto pra projétil.
   testadorSoco: {
     id: "testadorSoco",
     name: "Soco",
     tier: "basic",
     cost: 0,
     cooldownMs: 380,
-    target: { kind: "instant" },
+    target: { kind: "projectile", speed: 20 },
     effect: [{ kind: "damage", amount: 9 }],
     lunge: 1.2,
     knockback: 1,
-    vfx: { color: "#ffffff", particle: "spark", sound: "hit" },
+    vfx: { color: "#ffffff", particle: "slash", sound: "hit" },
   },
   guardiaoSoco: {
     id: "guardiaoSoco",
@@ -331,11 +335,11 @@ export const ABILITIES = {
     tier: "basic",
     cost: 0,
     cooldownMs: 650,
-    target: { kind: "instant" },
+    target: { kind: "projectile", speed: 14 }, // mais lento, mas o golpe pesa
     effect: [{ kind: "damage", amount: 15 }],
     lunge: 0.8,
     knockback: 2, // mais lento, mas o golpe pesa — empurra mais longe
-    vfx: { color: "#ffffff", particle: "shock", sound: "hit" },
+    vfx: { color: "#ffffff", particle: "slash", sound: "hit" },
   },
   senseiSoco: {
     id: "senseiSoco",
@@ -367,11 +371,11 @@ export const ABILITIES = {
     tier: "basic",
     cost: 0,
     cooldownMs: 430,
-    target: { kind: "instant" },
+    target: { kind: "projectile", speed: 17 },
     effect: [{ kind: "damage", amount: 11 }],
     lunge: 1,
     knockback: 1.2,
-    vfx: { color: "#ffffff", particle: "spark", sound: "hit" },
+    vfx: { color: "#ffffff", particle: "slash", sound: "hit" },
   },
 } satisfies Record<string, Ability>;
 
