@@ -20,7 +20,7 @@ function findEffect<T extends { kind: string }, K extends T["kind"]>(effects: T[
 
 const POSITION_SYNC_HZ = 15;
 const SURVIVAL_BROADCAST_HZ = 10;
-const MATCH_DURATION_MS = Number(new URLSearchParams(location.search).get("matchSeconds") ?? 180) * 1000;
+const MATCH_DURATION_MS = Number(new URLSearchParams(location.search).get("matchSeconds") ?? 600) * 1000;
 
 async function main() {
   const app = document.getElementById("app")!;
