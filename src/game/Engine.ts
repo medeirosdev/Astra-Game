@@ -498,6 +498,27 @@ export class Engine {
     return hits;
   }
 
+  // Mesma ideia de findMobsInRange, mas pro "beam" (ver abilities/types.ts)
+  // — reto na direção que eu tava olhando, não um raio ao redor de um
+  // ponto. Reaproveita a mesma matemática ponto-pra-segmento de combat.ts,
+  // só que com THREE.Vector3 (esse arquivo já depende de THREE, aquele não).
+  findMobsInBeam(origin: { x: number; y: number; z: number }, yaw: number, range: number, hitRadius = 1): string[] {
+    const start = new THREE.Vector3(origin.x, origin.y, origin.z);
+    const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(UP, yaw);
+    const end = start.clone().addScaledVector(forward, range);
+    const seg = end.clone().sub(start);
+    const segLenSq = seg.lengthSq();
+    const hits: string[] = [];
+    for (const [id, visual] of this.mobs) {
+      if (!visual.group.visible) continue;
+      const pos = visual.group.position;
+      const t = segLenSq === 0 ? 0 : THREE.MathUtils.clamp(pos.clone().sub(start).dot(seg) / segLenSq, 0, 1);
+      const closest = start.clone().addScaledVector(seg, t);
+      if (closest.distanceTo(pos) <= hitRadius) hits.push(id);
+    }
+    return hits;
+  }
+
   private onResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
@@ -531,6 +552,7 @@ export class Engine {
     this.updateDeathState(now);
     this.playerModel.update(dt);
     this.setLocalInvisible(this.runtime.isInvisible(now));
+    this.playerModel.group.scale.setScalar(this.runtime.getScaleFactor(now));
 
     if (this.frozen || this.runtime.isDead(now)) {
       this.updateCamera();
@@ -771,12 +793,13 @@ export class Engine {
     remote.group.add(remote.model.group);
   }
 
-  updateRemotePlayer(peerId: string, transform: Transform & { alive: boolean; invisible: boolean }) {
+  updateRemotePlayer(peerId: string, transform: Transform & { alive: boolean; invisible: boolean; scale?: number }) {
     const remote = this.remotePlayers.get(peerId);
     if (!remote) return;
     remote.target.set(transform.x, transform.y, transform.z);
     remote.yaw = transform.yaw;
     remote.group.visible = transform.alive && !transform.invisible;
+    remote.model?.group.scale.setScalar(transform.scale ?? 1);
   }
 
   // `anim` sobrescreve a animação padrão — usado pelo soco básico, cujo
@@ -867,6 +890,146 @@ export class Engine {
       spawnShockwaveRing(this.scene, originVec, ability.target.radius, ability.vfx.color);
       this.triggerShakeAt(originVec, Math.min(0.6, ability.target.radius * 0.05), ability.target.radius * 4, 260);
     }
+    if (ability.target.kind === "beam") {
+      this.spawnLaserBeam(originVec, yaw, ability.target.range, ability.target.durationMs, ability.vfx.color);
+    }
+    if (ability.target.kind === "zone") {
+      this.spawnZoneEffect(originVec, yaw, ability);
+    }
+  }
+
+  // Feixe contínuo (ver AbilityTargetType "beam") — cilindro fino na
+  // direção do cast, com leve flicker de energia, some sozinho ao fim de
+  // `durationMs` (mesma janela em que combat.ts confere os ticks de dano).
+  private spawnLaserBeam(origin: THREE.Vector3, yaw: number, range: number, durationMs: number, colorHex: string) {
+    const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(UP, yaw);
+    const start = origin.clone().add(new THREE.Vector3(0, 0.5, 0));
+    const end = start.clone().addScaledVector(forward, range);
+    const mid = start.clone().add(end).multiplyScalar(0.5);
+
+    const geo = new THREE.CylinderGeometry(0.09, 0.09, range, 8, 1, true);
+    const mat = new THREE.MeshBasicMaterial({
+      color: colorHex,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(mid);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), forward);
+    this.scene.add(mesh);
+
+    const light = new THREE.PointLight(colorHex, 5, 8);
+    light.position.copy(start).addScaledVector(forward, 1.5);
+    this.scene.add(light);
+
+    const startedAt = performance.now();
+    const tick = () => {
+      const t = (performance.now() - startedAt) / durationMs;
+      if (t >= 1) {
+        this.scene.remove(mesh, light);
+        geo.dispose();
+        mat.dispose();
+        return;
+      }
+      mat.opacity = 0.65 + Math.sin(t * 60) * 0.25;
+      light.intensity = 5 * (1 - t * 0.3);
+      requestAnimationFrame(tick);
+    };
+    tick();
+  }
+
+  // Bomba-relógio / caixa de lava (ver AbilityTargetType "zone") — marcador
+  // parado + anel de aviso no ponto de queda, espera `delayMs`, estoura
+  // (mesma onda de choque de área) e, se `durationMs > 0`, deixa uma poça
+  // de perigo no chão que fica ticando por baixo (ver spawnHazardZone).
+  private spawnZoneEffect(originVec: THREE.Vector3, yaw: number, ability: Ability) {
+    if (ability.target.kind !== "zone") return;
+    const { radius, throwDistance, delayMs, durationMs } = ability.target;
+    const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(UP, yaw);
+    const center = originVec.clone().addScaledVector(forward, throwDistance);
+    center.y = 0.05;
+
+    const markerGeo = new THREE.SphereGeometry(0.4, 12, 12);
+    const markerMat = new THREE.MeshStandardMaterial({ color: ability.vfx.color, emissive: ability.vfx.color, emissiveIntensity: 2.5 });
+    const marker = new THREE.Mesh(markerGeo, markerMat);
+    marker.position.copy(center).add(new THREE.Vector3(0, 0.4, 0));
+    this.scene.add(marker);
+
+    const ringGeo = new THREE.RingGeometry(0.95, 1, 40);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: ability.vfx.color,
+      transparent: true,
+      opacity: 0.5,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.copy(center);
+    ring.scale.setScalar(radius);
+    this.scene.add(ring);
+
+    const startedAt = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      if (now - startedAt < delayMs) {
+        // Pulsa mais rápido conforme o estouro se aproxima — telegraph.
+        marker.scale.setScalar(1 + Math.sin(now * 0.02) * 0.15);
+        requestAnimationFrame(tick);
+        return;
+      }
+      this.scene.remove(marker, ring);
+      markerGeo.dispose();
+      markerMat.dispose();
+      ringGeo.dispose();
+      ringMat.dispose();
+      spawnShockwaveRing(this.scene, center, radius, ability.vfx.color);
+      spawnParticleBurst(this.scene, this.particleRenderer, ability.vfx.particle, center, ability.vfx.color);
+      this.triggerShakeAt(center, 0.4, radius * 4, 260);
+      if (durationMs > 0) this.spawnHazardZone(center, radius, durationMs, ability.vfx.color);
+    };
+    tick();
+  }
+
+  // Poça de perigo persistente (lava) — some sozinha ao fim de `durationMs`,
+  // mesma janela em que combat.ts confere os ticks de dano.
+  private spawnHazardZone(center: THREE.Vector3, radius: number, durationMs: number, colorHex: string) {
+    const geo = new THREE.CircleGeometry(radius, 32);
+    const mat = new THREE.MeshBasicMaterial({
+      color: colorHex,
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.copy(center);
+    mesh.position.y = 0.06;
+    this.scene.add(mesh);
+
+    const light = new THREE.PointLight(colorHex, 3, radius * 2.5);
+    light.position.copy(center).add(new THREE.Vector3(0, 1, 0));
+    this.scene.add(light);
+
+    const startedAt = performance.now();
+    const tick = () => {
+      const t = (performance.now() - startedAt) / durationMs;
+      if (t >= 1) {
+        this.scene.remove(mesh, light);
+        geo.dispose();
+        mat.dispose();
+        return;
+      }
+      mat.opacity = 0.4 + Math.sin(t * 40) * 0.15;
+      requestAnimationFrame(tick);
+    };
+    tick();
   }
 
   private removeProjectile(index: number) {

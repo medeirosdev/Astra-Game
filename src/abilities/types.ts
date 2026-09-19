@@ -6,7 +6,18 @@ export type AbilityTargetType =
   | { kind: "projectile"; speed: number }
   | { kind: "area"; radius: number }
   | { kind: "instant" }
-  | { kind: "self" };
+  | { kind: "self" }
+  // Raio contínuo — uma linha reta fixa na direção em que o conjurador
+  // olhava no momento do cast (não é raycast por frame, é o mesmo espírito
+  // do "projétil": trajetória fixa, cada peer confere sozinho se tá nela).
+  // Acerta em ticks repetidos por `durationMs` em vez de só uma vez.
+  | { kind: "beam"; range: number; tickMs: number; durationMs: number }
+  // Área fixa num ponto à frente do conjurador (origem + `throwDistance` na
+  // direção do cast) — cobre tanto "bomba com pavio" (delayMs longo,
+  // durationMs 0 = um tick só) quanto "poça que fica no chão" (delayMs
+  // curto de telegraph, durationMs longo = vários ticks, ver
+  // characters.ts/combat.ts).
+  | { kind: "zone"; radius: number; throwDistance: number; delayMs: number; tickMs: number; durationMs: number };
 
 export type AbilityEffect =
   | { kind: "damage"; amount: number }
@@ -26,7 +37,12 @@ export type AbilityEffect =
   // Multiplica o dano que EU causo enquanto durar — precisa viajar junto no
   // cast (CastPayload.dmgMult) porque quem decide o valor final é sempre
   // quem apanha, a partir do que o atacante mandou.
-  | { kind: "damageBuff"; factor: number; durationMs: number };
+  | { kind: "damageBuff"; factor: number; durationMs: number }
+  // Escala o modelo do personagem (1 = normal) — "Modo Titã" (ver
+  // characters.ts). Puramente visual na runtime; o tamanho maior por si só
+  // não muda hitbox nenhuma (o jogo não tem uma), então some com um
+  // damageBuff junto se quiser que "grande" também bata mais forte.
+  | { kind: "giant"; scaleFactor: number; durationMs: number };
 
 export interface AbilityVfx {
   color: string;

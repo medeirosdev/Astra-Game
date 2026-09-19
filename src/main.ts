@@ -123,19 +123,63 @@ async function main() {
     sync.sendCast({ abilityId, ...engine.getLocalTransform(), anim, dmgMult: dmgMult !== 1 ? dmgMult : undefined });
   }
 
-  // Instant/área que acertaram algum mob (ver Engine.findMobsInRange) —
-  // só o modo Sobrevivência usa isso. Quem manda o hit reporta pro host
-  // (broadcast, mas só o host de fato age nele — ver onMobHit); se eu
-  // mesmo sou o host, aplico direto, sem round-trip de rede.
+  // Reporta um hit em mob pro host (broadcast, mas só o host de fato age
+  // nele — ver onMobHit); se eu mesmo sou o host, aplico direto, sem
+  // round-trip de rede. Mesma ideia pra todo target.kind, só muda quem
+  // decide "quais mobs" (ver reportMobHits).
+  function applyMobDamage(mobId: string, amount: number) {
+    if (room.getIsHost()) survival!.applyDamage(mobId, amount);
+    else sync.sendMobHit({ mobId, amount });
+  }
+
+  // Ponto fixo à frente de quem castou — mesma conta de combat.ts/pointAhead,
+  // duplicada aqui porque este arquivo não depende de THREE (ver findEffect
+  // acima) e aquele não depende de engine.
+  function pointAhead(origin: { x: number; y: number; z: number }, yaw: number, distance: number) {
+    return { x: origin.x - Math.sin(yaw) * distance, y: origin.y, z: origin.z - Math.cos(yaw) * distance };
+  }
+
+  // Mobs (só modo Sobrevivência) atingidos por um cast local — instant/área
+  // conferem na hora; beam/zone (ver abilities/types.ts) precisam repetir a
+  // checagem ao longo do tempo, igual a versão pra jogador em combat.ts.
   function reportMobHits(ability: Ability) {
     const damage = findEffect(ability.effect, "damage");
     if (!damage) return;
-    const reach = ability.target.kind === "instant" ? MELEE_REACH : ability.target.kind === "area" ? ability.target.radius : null;
-    if (reach === null) return;
     const origin = engine.getLocalTransform();
-    for (const mobId of engine.findMobsInRange(origin, reach)) {
-      if (room.getIsHost()) survival!.applyDamage(mobId, damage.amount);
-      else sync.sendMobHit({ mobId, amount: damage.amount });
+
+    if (ability.target.kind === "instant" || ability.target.kind === "area") {
+      const reach = ability.target.kind === "instant" ? MELEE_REACH : ability.target.radius;
+      for (const mobId of engine.findMobsInRange(origin, reach)) applyMobDamage(mobId, damage.amount);
+      return;
+    }
+
+    if (ability.target.kind === "beam") {
+      const { range, tickMs, durationMs } = ability.target;
+      const startedAt = performance.now();
+      const interval = setInterval(() => {
+        if (performance.now() - startedAt > durationMs) {
+          clearInterval(interval);
+          return;
+        }
+        for (const mobId of engine.findMobsInBeam(origin, origin.yaw, range)) applyMobDamage(mobId, damage.amount);
+      }, tickMs);
+      return;
+    }
+
+    if (ability.target.kind === "zone") {
+      const { radius, throwDistance, delayMs, tickMs, durationMs } = ability.target;
+      const center = pointAhead(origin, origin.yaw, throwDistance);
+      const startedAt = performance.now();
+      const interval = setInterval(() => {
+        const elapsed = performance.now() - startedAt;
+        if (elapsed < delayMs) return;
+        if (elapsed > delayMs + durationMs) {
+          clearInterval(interval);
+          return;
+        }
+        for (const mobId of engine.findMobsInRange(center, radius)) applyMobDamage(mobId, damage.amount);
+        if (durationMs === 0) clearInterval(interval);
+      }, tickMs);
     }
   }
 
@@ -167,6 +211,13 @@ async function main() {
     const ability: Ability = ABILITIES[abilityId];
     engine.castAbilityAt(ability, { x, y, z }, yaw);
     engine.playRemoteAnimation(casterId, ability, anim);
+    // Empurrão/puxão de "zone" (bomba/lava, ver combat.ts) precisam irradiar
+    // do PONTO onde a coisa explodiu, não de onde quem castou tava parado —
+    // os dois só coincidem pra instant/area, que explodem em cima de quem castou.
+    const pushOrigin =
+      ability.target.kind === "zone"
+        ? { x: x - Math.sin(yaw) * ability.target.throwDistance, y, z: z - Math.cos(yaw) * ability.target.throwDistance }
+        : { x, y, z };
     resolveIncomingCast(ability, { x, y, z }, yaw, () => engine.getLocalTransform(), () => {
       const now = performance.now();
       const wasAlive = !engine.runtime.isDead(now);
@@ -176,18 +227,23 @@ async function main() {
       // Empurrão/puxão são posicionais — resolvidos aqui (quem apanha
       // decide, igual dano), não em AbilityRuntime. Vale pra qualquer
       // habilidade que tenha, não só soco básico.
-      if (ability.knockback) engine.applyKnockback({ x, y, z }, ability.knockback);
+      if (ability.knockback) engine.applyKnockback(pushOrigin, ability.knockback);
       const pull = findEffect(ability.effect, "pull");
-      if (pull) engine.applyPull({ x, y, z }, pull.distance);
+      if (pull) engine.applyPull(pushOrigin, pull.distance);
 
-      // Soco/golpe básico conectou em mim — tropeço, flash na tela, e avisa
-      // todo mundo (o atacante quer o impacto físico no lugar certo, ver
-      // onHitFeedback; os outros só a reação de quem apanhou). Isso aqui é
-      // só o "tempero" do combate físico — poderes já têm seu próprio
-      // flash/partícula no momento do cast (ver Engine.castAbilityAt).
+      // Flash na tela em QUALQUER acerto (antes só soco básico tinha) —
+      // levar um corte/bomba/laser sem feedback nenhum além da vida caindo
+      // não parecia certo pra uma habilidade que bate em vários ticks
+      // (ver "beam"/"zone" em abilities/types.ts).
+      hud.flashDamage();
+
+      // Soco/golpe básico conectou em mim — tropeço, e avisa todo mundo (o
+      // atacante quer o impacto físico no lugar certo, ver onHitFeedback; os
+      // outros só a reação de quem apanhou). Isso aqui é só o "tempero" do
+      // combate físico — poderes já têm seu próprio flash/partícula no
+      // momento do cast (ver Engine.castAbilityAt).
       if (ability.tier === "basic") {
         engine.playLocalHitReaction();
-        hud.flashDamage();
         const { x: hx, y: hy, z: hz } = engine.getLocalTransform();
         sync.sendHitFeedback({ attackerId: casterId, x: hx, y: hy, z: hz });
       }
@@ -227,7 +283,12 @@ async function main() {
 
   setInterval(() => {
     const now = performance.now();
-    sync.sendPosition({ ...engine.getLocalTransform(), alive: !engine.runtime.isDead(now), invisible: engine.runtime.isInvisible(now) });
+    sync.sendPosition({
+      ...engine.getLocalTransform(),
+      alive: !engine.runtime.isDead(now),
+      invisible: engine.runtime.isInvisible(now),
+      scale: engine.runtime.getScaleFactor(now),
+    });
   }, 1000 / POSITION_SYNC_HZ);
 
   // Diagnóstico: RTCPeerConnection pode existir (sinalização encontrou o outro

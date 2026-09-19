@@ -31,6 +31,13 @@ const ICONS: Record<CharacterIcon, string> = {
     <polygon points="12,3 22,20 2,20"/>
     <polyline points="12,9 9,14 13,15 10,20"/>
   </svg>`,
+  // Mira/retículo — laser e explosivos teleguiados, pro especialista em
+  // artilharia (raio contínuo, bomba, ataque orbital).
+  target: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+    <circle cx="12" cy="12" r="8"/>
+    <circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>
+    <path stroke-linecap="round" d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/>
+  </svg>`,
 };
 
 export function showMenu(container: HTMLElement): Promise<MenuResult> {

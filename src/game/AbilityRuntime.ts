@@ -39,6 +39,8 @@ export class AbilityRuntime {
   private invisibleUntil = 0;
   private damageFactor = 1;
   private damageFactorUntil = 0;
+  private scaleFactor = 1;
+  private scaleFactorUntil = 0;
 
   constructor(private readonly character: CharacterDef) {
     this.health = character.stats.health;
@@ -148,6 +150,10 @@ export class AbilityRuntime {
       case "invisible":
         this.invisibleUntil = Math.max(this.invisibleUntil, now + effect.durationMs);
         break;
+      case "giant":
+        this.scaleFactor = effect.scaleFactor;
+        this.scaleFactorUntil = now + effect.durationMs;
+        break;
       case "teleport":
       case "pull":
         // Efeito posicional — quem aplica é o Engine (tem a posição do
@@ -172,6 +178,10 @@ export class AbilityRuntime {
     return now < this.invisibleUntil;
   }
 
+  getScaleFactor(now: number): number {
+    return now < this.scaleFactorUntil ? this.scaleFactor : 1;
+  }
+
   isDead(now: number): boolean {
     return now < this.deadUntil;
   }
@@ -191,6 +201,7 @@ export class AbilityRuntime {
     this.invulnerableUntil = 0;
     this.invisibleUntil = 0;
     this.damageFactorUntil = 0;
+    this.scaleFactorUntil = 0;
     this.deadUntil = 0;
     this.stunnedUntil = 0;
     this.speedFactorUntil = 0;

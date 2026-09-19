@@ -10,6 +10,9 @@ export interface PositionPayload {
   // esconde o avatar remoto por completo (eu mesmo ainda me vejo, semi
   // transparente, ver Engine.setLocalInvisible).
   invisible: boolean;
+  // Tamanho do modelo (1 = normal) — "Modo Titã" (ver characters.ts) usa
+  // isso pros OUTROS peers me verem grande também, não só eu.
+  scale?: number;
 }
 
 export interface CastPayload {

@@ -377,6 +377,85 @@ export const ABILITIES = {
     knockback: 1.2,
     vfx: { color: "#ffffff", particle: "slash", sound: "hit" },
   },
+
+  // John Doe — artilheiro/demolidor: sem magia de verdade, é laser e
+  // explosivo (raio contínuo, bomba de tempo, caixa que vira lava, ataque
+  // orbital) fechando com um "fica grande" que também bate mais forte.
+  johnDoeTiro: {
+    id: "johnDoeTiro",
+    name: "Tiro",
+    tier: "basic",
+    cost: 0,
+    cooldownMs: 320,
+    target: { kind: "projectile", speed: 27 },
+    effect: [{ kind: "damage", amount: 7 }],
+    lunge: 0.3,
+    knockback: 0.4,
+    vfx: { color: "#ff4d1a", particle: "spark", sound: "hit" },
+  },
+  raioLaserContinuo: {
+    id: "raioLaserContinuo",
+    name: "Raio Laser Contínuo",
+    tier: "common",
+    cost: 28,
+    cooldownMs: 6500,
+    // Linha reta fixa na direção do cast, 8 ticks de dano ao longo de
+    // ~1.4s em vez de um acerto só (ver combat.ts/Engine.spawnLaserBeam).
+    target: { kind: "beam", range: 22, tickMs: 180, durationMs: 1440 },
+    effect: [{ kind: "damage", amount: 6 }],
+    vfx: { color: "#ff4d1a", particle: "spark", sound: "zap" },
+  },
+  bombaRelogio: {
+    id: "bombaRelogio",
+    name: "Bomba-Relógio",
+    tier: "common",
+    cost: 30,
+    cooldownMs: 9000,
+    // durationMs 0 = um estouro só, 5s depois de plantada (ver
+    // combat.ts/Engine.spawnZoneEffect).
+    target: { kind: "zone", radius: 5, throwDistance: 6, delayMs: 5000, tickMs: 5000, durationMs: 0 },
+    effect: [{ kind: "damage", amount: 30 }],
+    knockback: 6, // "jogando todos" — o mais forte do elenco
+    vfx: { color: "#ff4d1a", particle: "nova", sound: "boom" },
+  },
+  caixaDeLava: {
+    id: "caixaDeLava",
+    name: "Caixa de Lava",
+    tier: "strong",
+    cost: 44,
+    cooldownMs: 11000,
+    // Estoura rápido (telegraph de 900ms) e deixa uma poça ticando por 6s —
+    // controle de área, não burst único.
+    target: { kind: "zone", radius: 4.5, throwDistance: 5, delayMs: 900, tickMs: 700, durationMs: 6000 },
+    effect: [{ kind: "damage", amount: 8 }],
+    vfx: { color: "#ff6a1a", particle: "nova", sound: "boom" },
+  },
+  raioOrbital: {
+    id: "raioOrbital",
+    name: "Raio Laser Orbital",
+    tier: "strong",
+    cost: 48,
+    cooldownMs: 12000,
+    // Alcance bem maior que o resto do kit (throwDistance 16) — chamado à
+    // distância, não plantado aos pés. vfx "lightning" já desenha um feixe
+    // caindo do céu (ver particles.ts), serve perfeito de raio orbital.
+    target: { kind: "zone", radius: 5.5, throwDistance: 16, delayMs: 550, tickMs: 550, durationMs: 0 },
+    effect: [{ kind: "damage", amount: 40 }],
+    vfx: { color: "#ff4d1a", particle: "lightning", sound: "boom" },
+  },
+  modoTitan: {
+    id: "modoTitan",
+    name: "Modo Titã",
+    tier: "super",
+    cost: 115,
+    cooldownMs: 55000,
+    target: { kind: "self" },
+    effect: [
+      { kind: "giant", scaleFactor: 1.9, durationMs: 10000 },
+      { kind: "damageBuff", factor: 1.6, durationMs: 10000 },
+    ],
+    vfx: { color: "#ff4d1a", particle: "shock", sound: "boom" },
+  },
 } satisfies Record<string, Ability>;
 
 export type AbilityId = keyof typeof ABILITIES;

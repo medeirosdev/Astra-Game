@@ -6,6 +6,7 @@ const MELEE_RANGE = 3;
 const PROJECTILE_HIT_RADIUS = 0.8;
 export const PROJECTILE_LIFETIME_MS = 3000;
 const PROJECTILE_CHECK_INTERVAL_MS = 100;
+const BEAM_HIT_RADIUS = 1;
 
 function distance(a: Vec3, b: Vec3): number {
   const dx = a.x - b.x;
@@ -41,6 +42,13 @@ function projectilePositionAt(origin: Vec3, yaw: number, speed: number, elapsedS
   return { x: origin.x + forwardX * traveled, y: origin.y + 0.5, z: origin.z + forwardZ * traveled };
 }
 
+// Ponto fixo à frente de quem castou, na direção que olhava — mesma ideia
+// de projectilePositionAt mas sem o tempo (usado por "zone", que não anda,
+// só nasce num lugar — ver AbilityTargetType em abilities/types.ts).
+function pointAhead(origin: Vec3, yaw: number, distance: number): Vec3 {
+  return { x: origin.x - Math.sin(yaw) * distance, y: origin.y + 0.5, z: origin.z - Math.cos(yaw) * distance };
+}
+
 // Cada cliente decide, pra si mesmo, se um cast recebido de outro peer o
 // atingiu (ver regra em AbilityRuntime) — chama onHit() quando concluir que
 // sim. Instant/area resolvem na hora; projétil precisa simular a trajetória
@@ -74,6 +82,40 @@ export function resolveIncomingCast(ability: Ability, origin: Vec3, yaw: number,
       }
       lastPos = currentPos;
     }, PROJECTILE_CHECK_INTERVAL_MS);
+  }
+
+  if (ability.target.kind === "beam") {
+    const { range, tickMs, durationMs } = ability.target;
+    const start = { x: origin.x, y: origin.y + 0.5, z: origin.z };
+    const end = { x: start.x - Math.sin(yaw) * range, y: start.y, z: start.z - Math.cos(yaw) * range };
+    const startedAt = performance.now();
+    const interval = setInterval(() => {
+      if (performance.now() - startedAt > durationMs) {
+        clearInterval(interval);
+        return;
+      }
+      if (pointToSegmentDistance(start, end, getMyPosition()) <= BEAM_HIT_RADIUS) onHit();
+    }, tickMs);
+    return;
+  }
+
+  if (ability.target.kind === "zone") {
+    const { radius, throwDistance, delayMs, tickMs, durationMs } = ability.target;
+    const center = pointAhead(origin, yaw, throwDistance);
+    const startedAt = performance.now();
+    const interval = setInterval(() => {
+      const elapsed = performance.now() - startedAt;
+      if (elapsed < delayMs) return;
+      if (elapsed > delayMs + durationMs) {
+        clearInterval(interval);
+        return;
+      }
+      if (distance(center, getMyPosition()) <= radius) onHit();
+      // durationMs 0 (ex: bomba de estouro único) — um tick só e já limpa,
+      // senão o setInterval ficaria disparando pra sempre no mesmo instante.
+      if (durationMs === 0) clearInterval(interval);
+    }, tickMs);
+    return;
   }
 
   // "self": nunca acerta quem recebeu o broadcast — só o próprio autor do

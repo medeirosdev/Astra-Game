@@ -107,6 +107,29 @@ export const CHARACTERS = {
     basicAttackId: "ronnieSoco",
     comboAnims: ["Melee_Hook", "Punch_Cross", "OverhandThrow"],
   },
+  johnDoe: {
+    id: "johnDoe",
+    name: "John Doe",
+    color: "#ff4d1a",
+    modelUrl: "/models/superhero-male.glb",
+    outfitUrl: "/models/outfits/Male_Ranger.glb",
+    tagline: "Laser e demolição",
+    icon: "target",
+    // Artilheiro puro — nada de corpo a corpo de verdade, o kit inteiro é
+    // colocar dano à distância no chão (raio contínuo, bomba, lava, ataque
+    // orbital) e só entrar em risco perto de alguém no Modo Titã, quando já
+    // bate mais forte também (damageBuff junto do giant, ver abilities.ts).
+    stats: { health: 95, energy: 120, energyRegenPerSec: 8, moveSpeed: 5.8, guard: 75, guardRegenPerSec: 13 },
+    loadout: {
+      common: ["raioLaserContinuo", "bombaRelogio"],
+      strong: ["caixaDeLava", "raioOrbital"],
+      super: "modoTitan",
+    },
+    basicAttackId: "johnDoeTiro",
+    // Gesto de atirar (a "arma" é o próprio raio saindo da mão) em vez de
+    // soco — combina com o resto do kit ser tudo à distância.
+    comboAnims: ["Pistol_Shoot", "Pistol_Shoot"],
+  },
 } satisfies Record<string, CharacterDef>;
 
 export type CharacterId = keyof typeof CHARACTERS;

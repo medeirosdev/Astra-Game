@@ -21,7 +21,7 @@ export interface CharacterLoadout {
 // Puramente visual (tela de seleção de personagem) — qual ícone/frase
 // aparece no card. Fica em CharacterDef porque é "dado do personagem", mas
 // o desenho do ícone em si é responsabilidade da UI (src/ui/menu.ts).
-export type CharacterIcon = "eye" | "bolt" | "shield" | "void" | "quake";
+export type CharacterIcon = "eye" | "bolt" | "shield" | "void" | "quake" | "target";
 
 export interface CharacterDef {
   id: string;
