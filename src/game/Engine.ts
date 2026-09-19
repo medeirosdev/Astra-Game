@@ -14,7 +14,7 @@ import { createParticleRenderer, spawnParticleBurst, spawnShockwaveRing } from "
 import type { BatchedRenderer } from "three.quarks";
 import { MOB_TYPES } from "./mobs";
 import type { MobSnapshot } from "../network/sync";
-import { rollCardRarity, CARD_COLOR } from "./cards";
+import { rollCardRarity, CARD_COLOR, ITEM_COLOR, ITEM_DROP_CHANCE } from "./cards";
 
 const GRID_SIZE = 240; // 10x o tamanho original (24), a pedido
 const BLOCK_SIZE = 1;
@@ -291,7 +291,7 @@ export class Engine {
     this.player = new THREE.Group();
     this.player.position.copy(SPAWN_POINT);
     this.scene.add(this.player);
-    this.playerModel = new CharacterModel(character.modelUrl, character.color, character.skinTextureUrl, character.outfitUrl);
+    this.playerModel = new CharacterModel(character.modelUrl, character.color, character.skinTextureUrl, character.outfitUrl, character.weapon);
     this.player.add(this.playerModel.group);
 
     this.composer = new EffectComposer(this.renderer);
@@ -623,10 +623,18 @@ export class Engine {
   }
 
   private openChest(chest: Chest, now: number) {
-    const rarity = rollCardRarity();
-    this.runtime.addCard(rarity);
     const worldPos = chest.position.clone().add(new THREE.Vector3(0, 0.8, 0));
-    spawnParticleBurst(this.scene, this.particleRenderer, "nova", worldPos, CARD_COLOR[rarity]);
+    let color: string;
+    // Item só se ainda tiver slot livre (1 por vez, ver AbilityRuntime) —
+    // senão vira carta, baú nunca "desperdiça" o prêmio.
+    if (Math.random() < ITEM_DROP_CHANCE && this.runtime.pickupItem(Math.random() < 0.5 ? "potion" : "shield")) {
+      color = ITEM_COLOR[this.runtime.getHeldItem()!];
+    } else {
+      const rarity = rollCardRarity();
+      this.runtime.addCard(rarity);
+      color = CARD_COLOR[rarity];
+    }
+    spawnParticleBurst(this.scene, this.particleRenderer, "nova", worldPos, color);
     playSound("chime");
     chest.group.visible = false;
     chest.readyAt = now + CHEST_RESPAWN_MS;
@@ -1191,7 +1199,14 @@ export class Engine {
     this.remotePlayers.set(peerId, { group, placeholder, model: null, target: group.position.clone(), yaw: 0 });
   }
 
-  setRemotePlayerCharacter(peerId: string, modelUrl: string, tintColor: string, skinTextureUrl?: string, outfitUrl?: string) {
+  setRemotePlayerCharacter(
+    peerId: string,
+    modelUrl: string,
+    tintColor: string,
+    skinTextureUrl?: string,
+    outfitUrl?: string,
+    weapon?: "sword" | "axe",
+  ) {
     const remote = this.remotePlayers.get(peerId);
     if (!remote || remote.model) return;
     if (remote.placeholder) {
@@ -1200,7 +1215,7 @@ export class Engine {
       (remote.placeholder.material as THREE.Material).dispose();
       remote.placeholder = null;
     }
-    remote.model = new CharacterModel(modelUrl, tintColor, skinTextureUrl, outfitUrl);
+    remote.model = new CharacterModel(modelUrl, tintColor, skinTextureUrl, outfitUrl, weapon);
     remote.group.add(remote.model.group);
   }
 

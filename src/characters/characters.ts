@@ -50,6 +50,7 @@ export const CHARACTERS = {
     color: "#7dffb3",
     modelUrl: "/models/superhero-male.glb",
     outfitUrl: "/models/outfits/Male_Ranger.glb",
+    weapon: "sword",
     tagline: "Tanque e controle",
     icon: "shield",
     // Guarda alta e regenera devagar — é o tanque, segurar o bloqueio

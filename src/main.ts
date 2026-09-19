@@ -200,7 +200,14 @@ async function main() {
   sync.onHello(({ characterId: remoteCharacterId }, peerId) => {
     if (!isCharacterId(remoteCharacterId)) return;
     const remoteCharacter: CharacterDef = CHARACTERS[remoteCharacterId];
-    engine.setRemotePlayerCharacter(peerId, remoteCharacter.modelUrl, remoteCharacter.color, remoteCharacter.skinTextureUrl, remoteCharacter.outfitUrl);
+    engine.setRemotePlayerCharacter(
+      peerId,
+      remoteCharacter.modelUrl,
+      remoteCharacter.color,
+      remoteCharacter.skinTextureUrl,
+      remoteCharacter.outfitUrl,
+      remoteCharacter.weapon,
+    );
   });
   sync.onPosition((transform, peerId) => {
     engine.updateRemotePlayer(peerId, transform);
@@ -314,6 +321,13 @@ async function main() {
     }
     if (e.code === "ShiftLeft" || e.code === "ShiftRight") {
       engine.tryRoll();
+      return;
+    }
+    // "F" usa o item segurado (poção/escudo de baú, ver AbilityRuntime) —
+    // puramente local, sem efeito em ninguém além de mim, então não passa
+    // por cast/rede nenhuma.
+    if (e.key.toLowerCase() === "f") {
+      engine.runtime.useHeldItem(now);
       return;
     }
 

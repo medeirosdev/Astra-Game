@@ -279,6 +279,45 @@ body {
   0% { transform: scale(1.3); }
   100% { transform: scale(1); }
 }
+
+/* Item de baú segurado (ver AbilityRuntime.useHeldItem) — cor herdada do
+   próprio item (potion/shield, ver hud.ts). */
+.item-info {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.item-icon { width: 16px; height: 16px; }
+.item-icon svg { width: 100%; height: 100%; }
+
+/* Ícones de status (stun/lento/rápido/buff/invisível/gigante) — cada um só
+   aparece enquanto o efeito tá ativo (ver Hud.updateEffects). */
+.status-effects {
+  display: flex;
+  gap: 6px;
+  min-height: 22px;
+}
+.status-icon {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(10, 10, 18, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 4px;
+}
+.status-icon svg { width: 100%; height: 100%; }
+.status-stun { color: #ffd54f; }
+.status-slow { color: #7fa8ff; }
+.status-haste { color: #7dffb3; }
+.status-damageBuff { color: #ff6a6a; }
+.status-invisible { color: #b8a8ff; }
+.status-giant { color: #ff9d4d; }
+
 .bar-fill.guard { background: #9ad1ff; }
 
 /* Barra de defesa some quando cheia e sem uso, pra não poluir o HUD — só

@@ -38,6 +38,10 @@ export interface CharacterDef {
   // "nua" original — é isso que dá uma skin de verdade por personagem, não
   // só cor diferente no mesmo corpo.
   outfitUrl?: string;
+  // Arma presa na mão direita (ver CharacterModel.createWeaponMesh) — só
+  // faz sentido em quem já usa clipes "Sword_*" no combo (ver comboAnims),
+  // senão fica balançando arma enquanto o golpe visual é soco.
+  weapon?: "sword" | "axe";
   tagline: string;
   icon: CharacterIcon;
   stats: CharacterStats;

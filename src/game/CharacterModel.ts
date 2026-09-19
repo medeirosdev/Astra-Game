@@ -56,6 +56,54 @@ function loadCharacterTemplate(url: string): Promise<CharacterTemplate> {
   return cached;
 }
 
+// Arma procedural presa na mão direita (ver CharacterDef.weapon) — nenhum
+// asset baixado, só geometria simples; dá pra fazer porque o rig já tem
+// animações de espada prontas (Sword_Attack, Sword_Regular_A/B/C etc, ver
+// public/models/CREDITS.txt) e o osso da mão já era rastreado pro rastro
+// do soco (ver getHandWorldPositions).
+function createSwordMesh(): THREE.Group {
+  const group = new THREE.Group();
+  const bladeMat = new THREE.MeshStandardMaterial({ color: "#c9d3dc", metalness: 0.7, roughness: 0.25 });
+  const hiltMat = new THREE.MeshStandardMaterial({ color: "#3a2a1a", roughness: 0.8 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: "#8a7a3a", metalness: 0.6, roughness: 0.4 });
+
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.7, 0.15), bladeMat);
+  blade.position.y = 0.45;
+  group.add(blade);
+
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.06), trimMat);
+  guard.position.y = 0.08;
+  group.add(guard);
+
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.16, 8), hiltMat);
+  handle.position.y = -0.02;
+  group.add(handle);
+
+  const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), trimMat);
+  pommel.position.y = -0.12;
+  group.add(pommel);
+
+  group.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) obj.castShadow = true;
+  });
+  return group;
+}
+
+function createWeaponMesh(kind: "sword" | "axe"): THREE.Group {
+  // "axe" reaproveita a mesma silhueta por enquanto (lâmina mais larga e
+  // curta) — mesma técnica, só geometria diferente, fácil de distinguir
+  // mais no futuro se algum personagem pedir machado de verdade.
+  if (kind === "axe") {
+    const group = createSwordMesh();
+    const blade = group.children[0] as THREE.Mesh;
+    blade.geometry.dispose();
+    blade.geometry = new THREE.BoxGeometry(0.32, 0.4, 0.08);
+    blade.position.y = 0.32;
+    return group;
+  }
+  return createSwordMesh();
+}
+
 // Trajes do pack "Modular Character Outfits" (ver public/models/CREDITS.txt)
 // compartilham o MESMO rig de 65 ossos do corpo base, mas cada arquivo vem
 // com o próprio esqueleto/ordem de joints — pra costurar a roupa nos ossos
@@ -139,11 +187,12 @@ export class CharacterModel {
   // Ossos das mãos — usados pra desenhar o rastro do soco/chute seguindo a
   // posição real da mão durante o swing (ver Engine.updateAttackTrail).
   private handBones: THREE.Object3D[] = [];
+  private handRBone: THREE.Object3D | null = null;
   // Materiais (já clonados por instância, ver constructor) — usado pra
   // deixar o personagem semi-transparente durante invisibilidade.
   private meshMaterials: THREE.Material[] = [];
 
-  constructor(modelUrl: string, tintColor?: string, skinTextureUrl?: string, outfitUrl?: string) {
+  constructor(modelUrl: string, tintColor?: string, skinTextureUrl?: string, outfitUrl?: string, weapon?: "sword" | "axe") {
     Promise.all([
       loadCharacterTemplate(modelUrl),
       loadAnimationLibrary(),
@@ -158,6 +207,7 @@ export class CharacterModel {
       let bodySkeleton: THREE.Skeleton | null = null;
       instance.traverse((obj) => {
         if (obj.name === "hand_l" || obj.name === "hand_r") this.handBones.push(obj);
+        if (obj.name === "hand_r") this.handRBone = obj;
         if (obj instanceof THREE.SkinnedMesh && !bodySkeleton) bodySkeleton = obj.skeleton;
         if (!(obj instanceof THREE.Mesh)) return;
         obj.castShadow = true;
@@ -191,6 +241,15 @@ export class CharacterModel {
           instance.add(piece);
           this.meshMaterials.push(piece.material as THREE.Material);
         }
+      }
+      if (weapon && this.handRBone) {
+        const weaponMesh = createWeaponMesh(weapon);
+        // Offset de posição/rotação ajustado visualmente (ver about.md
+        // sobre o rig não vir com socket de arma pronto) pra encaixar na
+        // mão fechada sem flutuar nem cravar no pulso.
+        weaponMesh.position.set(0, 0.06, 0.02);
+        weaponMesh.rotation.set(0, 0, -Math.PI / 2);
+        this.handRBone.add(weaponMesh);
       }
       this.group.add(instance);
 

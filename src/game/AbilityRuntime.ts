@@ -1,7 +1,7 @@
 import type { Ability, AbilityEffect } from "../abilities/types";
 import { ABILITIES, type AbilityId } from "../abilities/abilities";
 import type { CharacterDef } from "../characters/types";
-import { CARD_BONUS, type CardRarity } from "./cards";
+import { CARD_BONUS, type CardRarity, type ItemKind, POTION_HEAL_AMOUNT, SHIELD_DURATION_MS, SHIELD_REDUCTION } from "./cards";
 
 export interface CastResult {
   ability: Ability;
@@ -45,6 +45,9 @@ export class AbilityRuntime {
   // Cartas coletadas em baús (ver Engine.updateChests/cards.ts) — % de dano
   // permanente que acumula enquanto vivo, zera tudo ao morrer.
   private cards: CardRarity[] = [];
+  private heldItem: ItemKind | null = null;
+  private incomingDamageFactor = 1;
+  private incomingDamageFactorUntil = 0;
 
   constructor(private readonly character: CharacterDef) {
     this.health = character.stats.health;
@@ -126,7 +129,8 @@ export class AbilityRuntime {
     if (effect.kind !== "heal" && this.isInvulnerable(now)) return;
     switch (effect.kind) {
       case "damage": {
-        const amount = effect.amount * damageMultiplier;
+        const shieldReduction = now < this.incomingDamageFactorUntil ? this.incomingDamageFactor : 1;
+        const amount = effect.amount * damageMultiplier * shieldReduction;
         // Bloqueando: o dano consome a guarda primeiro; o que sobrar (guarda
         // quebrou no meio do golpe) vaza pra vida, igual dano normal.
         const toGuard = this.isBlocking() ? Math.min(this.guard, amount) : 0;
@@ -198,6 +202,38 @@ export class AbilityRuntime {
     return this.cards.reduce((sum, r) => sum + CARD_BONUS[r], 0);
   }
 
+  // Buff de dano temporário ativo agora — separado de getDamageFactor()
+  // porque esse já mistura com o bônus permanente das cartas (útil pro
+  // valor final, ruim pra decidir se mostra o ícone de status ou não).
+  isDamageBuffed(now: number): boolean {
+    return now < this.damageFactorUntil;
+  }
+
+  // true se pegou (guardava vazio); false se já tinha item — quem chama
+  // decide o que fazer com o baú nesse caso (ver Engine.openChest).
+  pickupItem(kind: ItemKind): boolean {
+    if (this.heldItem) return false;
+    this.heldItem = kind;
+    return true;
+  }
+
+  getHeldItem(): ItemKind | null {
+    return this.heldItem;
+  }
+
+  useHeldItem(now: number): boolean {
+    if (!this.heldItem || this.isDead(now)) return false;
+    if (this.heldItem === "potion") {
+      this.health = Math.min(this.maxHealth, this.health + POTION_HEAL_AMOUNT);
+    } else {
+      this.guard = this.maxGuard;
+      this.incomingDamageFactor = SHIELD_REDUCTION;
+      this.incomingDamageFactorUntil = now + SHIELD_DURATION_MS;
+    }
+    this.heldItem = null;
+    return true;
+  }
+
   isInvisible(now: number): boolean {
     return now < this.invisibleUntil;
   }
@@ -229,6 +265,8 @@ export class AbilityRuntime {
     this.deadUntil = 0;
     this.stunnedUntil = 0;
     this.speedFactorUntil = 0;
+    this.heldItem = null;
+    this.incomingDamageFactorUntil = 0;
     return true;
   }
 }

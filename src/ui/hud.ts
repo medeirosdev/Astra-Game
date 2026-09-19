@@ -4,7 +4,24 @@ import type { CharacterDef } from "../characters/types";
 import { LOCAL_SCORE_KEY, type MatchState } from "../game/match";
 import type { SurvivalState } from "../game/survival";
 import { MOB_TYPES } from "../game/mobs";
-import { CARD_COLOR } from "../game/cards";
+import { CARD_COLOR, ITEM_COLOR, ITEM_LABEL, type ItemKind } from "../game/cards";
+
+// Ícones de status (ver Hud.updateEffects) — mesmo estilo simples currentColor
+// dos ícones de personagem em menu.ts, só que esses vivem só aqui (não são
+// "dado de personagem", são efeito temporário de combate).
+const STATUS_ICONS: Record<string, string> = {
+  stun: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 14 9 21 9 15 13 17 21 12 16 7 21 9 13 3 9 10 9Z"/></svg>`,
+  slow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 6 12 12 18 6"/><polyline points="6 14 12 20 18 14"/></svg>`,
+  haste: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 18 12 12 18 18"/><polyline points="6 10 12 4 18 10"/></svg>`,
+  damageBuff: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 19 15 9"/><path d="M13 5 19 11"/><path d="M15 3 21 9"/><path d="M3 21 6 18"/></svg>`,
+  invisible: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12C4.8 6.5 8.2 4 12 4s7.2 2.5 10 8c-2.8 5.5-6.2 8-10 8S4.8 17.5 2 12Z"/><path d="M3 3 21 21"/></svg>`,
+  giant: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>`,
+};
+
+const ITEM_ICONS: Record<ItemKind, string> = {
+  potion: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2h4M10 2v5l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V2"/></svg>`,
+  shield: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 9 4.6-0.5 8-4 8-9V5l-8-3Z"/></svg>`,
+};
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.ceil(ms / 1000);
@@ -31,6 +48,10 @@ export class Hud {
   private readonly bossBarFillEl: HTMLDivElement;
   private readonly cardsEl: HTMLDivElement;
   private lastCardCount = 0;
+  private readonly itemEl: HTMLDivElement;
+  private lastHeldItem: ItemKind | null = null;
+  private readonly effectsEl: HTMLDivElement;
+  private readonly effectIconEls: Record<string, HTMLDivElement> = {};
 
   constructor(container: HTMLElement, character: CharacterDef) {
     this.root = document.createElement("div");
@@ -38,6 +59,19 @@ export class Hud {
 
     const bars = document.createElement("div");
     bars.className = "hud-bars";
+
+    this.effectsEl = document.createElement("div");
+    this.effectsEl.className = "status-effects";
+    for (const key of Object.keys(STATUS_ICONS)) {
+      const icon = document.createElement("div");
+      icon.className = `status-icon status-${key}`;
+      icon.innerHTML = STATUS_ICONS[key];
+      icon.style.display = "none";
+      this.effectsEl.appendChild(icon);
+      this.effectIconEls[key] = icon;
+    }
+    bars.appendChild(this.effectsEl);
+
     this.healthFill = document.createElement("div");
     this.healthFill.className = "bar-fill health";
     const healthBar = document.createElement("div");
@@ -61,6 +95,10 @@ export class Hud {
     this.cardsEl = document.createElement("div");
     this.cardsEl.className = "cards-info";
     bars.appendChild(this.cardsEl);
+
+    this.itemEl = document.createElement("div");
+    this.itemEl.className = "item-info";
+    bars.appendChild(this.itemEl);
 
     const slots = document.createElement("div");
     slots.className = "hud-slots";
@@ -177,6 +215,46 @@ export class Hud {
     }
 
     this.updateCards(runtime);
+    this.updateItem(runtime);
+    this.updateEffects(runtime, now);
+  }
+
+  // Item segurado (ver AbilityRuntime.useHeldItem) — mostra qual é e o
+  // lembrete de tecla, some quando não tem nenhum.
+  private updateItem(runtime: AbilityRuntime) {
+    const item = runtime.getHeldItem();
+    if (item === this.lastHeldItem) return;
+    this.lastHeldItem = item;
+    this.itemEl.replaceChildren();
+    if (!item) {
+      this.itemEl.style.display = "none";
+      return;
+    }
+    this.itemEl.style.display = "flex";
+    this.itemEl.style.color = ITEM_COLOR[item];
+    const icon = document.createElement("span");
+    icon.className = "item-icon";
+    icon.innerHTML = ITEM_ICONS[item];
+    const label = document.createElement("span");
+    label.textContent = `${ITEM_LABEL[item]} (F)`;
+    this.itemEl.append(icon, label);
+  }
+
+  // Ícones de status (stun/lento/rápido/buff de dano/invisível/gigante) —
+  // cada um só aparece enquanto o efeito correspondente tá ativo.
+  private updateEffects(runtime: AbilityRuntime, now: number) {
+    const speedFactor = runtime.getSpeedFactor(now);
+    const active: Record<string, boolean> = {
+      stun: runtime.isStunned(now),
+      slow: speedFactor < 1,
+      haste: speedFactor > 1,
+      damageBuff: runtime.isDamageBuffed(now),
+      invisible: runtime.isInvisible(now),
+      giant: runtime.getScaleFactor(now) > 1,
+    };
+    for (const [key, el] of Object.entries(this.effectIconEls)) {
+      el.style.display = active[key] ? "flex" : "none";
+    }
   }
 
   // Cartas de baú (ver Engine.openChest/cards.ts) — uma bolinha colorida

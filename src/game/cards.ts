@@ -42,3 +42,16 @@ export function rollCardRarity(): CardRarity {
   }
   return "comum";
 }
+
+// Itens de baú (ver AbilityRuntime.useHeldItem) — alternativa à carta,
+// guardado até usar com "F" em vez de aplicar sozinho ao coletar.
+export type ItemKind = "potion" | "shield";
+export const ITEM_COLOR: Record<ItemKind, string> = { potion: "#4fd66b", shield: "#4fa3ff" };
+export const ITEM_LABEL: Record<ItemKind, string> = { potion: "Poção de Cura", shield: "Escudo Temporário" };
+export const POTION_HEAL_AMOUNT = 35;
+export const SHIELD_DURATION_MS = 6000;
+export const SHIELD_REDUCTION = 0.5; // metade do dano recebido enquanto durar
+
+// Chance de um baú dar item em vez de carta, e dentro disso, poção vs
+// escudo (ver Engine.openChest).
+export const ITEM_DROP_CHANCE = 0.3;
